@@ -810,22 +810,6 @@ html.dark .bookmark-item.selected {
   margin-left: auto;
 }
 
-/* Broken link indicator */
-.grid-card-broken {
-  margin-left: 2px;
-  font-size: 10px;
-  flex-shrink: 0;
-  color: var(--danger);
-}
-
-.grid-section-warning {
-  padding: 6px 12px;
-  font-size: 11px;
-  color: var(--warning-text);
-  background: var(--warning-bg);
-  border-bottom: 1px solid var(--border);
-}
-
 .grid-view-empty {
   display: flex;
   align-items: center;
