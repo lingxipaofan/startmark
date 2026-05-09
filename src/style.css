@@ -654,6 +654,49 @@ body {
   margin-left: auto;
 }
 
+/* Sub-folder groups inside a section */
+.grid-sub-group {
+  position: relative;
+}
+
+.grid-sub-group.drag-over > .grid-sub-header {
+  background: #c8e6c9;
+  border-radius: 4px;
+}
+
+.grid-sub-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #666;
+  cursor: default;
+  user-select: none;
+  transition: background 0.1s;
+}
+
+.grid-sub-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.grid-sub-title {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid-sub-count {
+  margin-left: auto;
+  font-size: 10px;
+  color: #bbb;
+  background: #f0f0f0;
+  padding: 0 6px;
+  border-radius: 6px;
+}
+
 .grid-view-empty {
   display: flex;
   align-items: center;
