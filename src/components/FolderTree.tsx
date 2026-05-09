@@ -9,6 +9,9 @@ interface Props {
   onDropBookmarks?: (bookmarkIds: string[], destinationFolderId: string) => void;
 }
 
+// Module-level tracker for the folder being dragged (shared across recursive instances)
+let _dragFolderId: string | null = null;
+
 export default function FolderTree({ tree, selectedFolder, onSelect, onContextMenu, onDropBookmarks }: Props) {
   return (
     <div className="folder-tree">
@@ -21,6 +24,7 @@ export default function FolderTree({ tree, selectedFolder, onSelect, onContextMe
           onSelect={onSelect}
           onContextMenu={onContextMenu}
           onDropBookmarks={onDropBookmarks}
+          ancestorIds={new Set()}
         />
       ))}
     </div>
@@ -34,6 +38,7 @@ function FolderNode({
   onSelect,
   onContextMenu,
   onDropBookmarks,
+  ancestorIds,
 }: {
   node: BookmarkNode;
   depth: number;
@@ -41,14 +46,32 @@ function FolderNode({
   onSelect: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, node: BookmarkNode) => void;
   onDropBookmarks?: (bookmarkIds: string[], destinationFolderId: string) => void;
+  ancestorIds: Set<string>;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const hasChildren = node.children && node.children.length > 0;
 
+  const canDrag = node.id !== "0" && node.id !== "1";
+  // Dropping on self or on a descendant of the dragged folder → invalid
+  const isInvalidTarget = _dragFolderId !== null &&
+    (node.id === _dragFolderId || ancestorIds.has(_dragFolderId));
+
+  const handleDragStart = (e: React.DragEvent) => {
+    _dragFolderId = node.id;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", JSON.stringify([node.id]));
+  };
+
+  const handleDragEnd = () => {
+    _dragFolderId = null;
+    setDragOver(false);
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
+    if (isInvalidTarget) return;
     const raw = e.dataTransfer.getData("text/plain");
     if (!raw) return;
     try {
@@ -66,6 +89,18 @@ function FolderNode({
         onDropBookmarks([raw], node.id);
       }
     }
+    _dragFolderId = null;
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!isInvalidTarget) {
+      setDragOver(true);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(false);
   };
 
   return (
@@ -75,11 +110,11 @@ function FolderNode({
         style={{ paddingLeft: `${12 + depth * 16}px` }}
         onClick={() => onSelect(node.id)}
         onContextMenu={(e) => onContextMenu(e, node)}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
+        draggable={canDrag}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         {hasChildren && (
@@ -111,6 +146,7 @@ function FolderNode({
                 onSelect={onSelect}
                 onContextMenu={onContextMenu}
                 onDropBookmarks={onDropBookmarks}
+                ancestorIds={new Set([...ancestorIds, node.id])}
               />
             ) : null
           )}

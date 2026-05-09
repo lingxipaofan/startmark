@@ -309,6 +309,7 @@ export default function App() {
               selectedFolder={selectedFolder}
               onSelect={selectFolder}
               onContextMenu={handleFolderContextMenu}
+              onDropBookmarks={handleGridDropBookmarks}
             />
             <button
               className="btn-new-folder"
