@@ -205,6 +205,11 @@ export default function App() {
     if (!contextMenu) return;
     const node = contextMenu.node!;
 
+    if (action === "create-sub-folder") {
+      createFolder(node.id);
+      setContextMenu(null);
+      return;
+    }
     if (action === "delete-folder") {
       await handleDeleteFolderWithUndo(node.id, node.title);
     }

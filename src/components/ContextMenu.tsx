@@ -20,6 +20,10 @@ export default function ContextMenu({ x, y, type, onAction }: Props) {
             打开全部
           </div>
           <div className="context-menu-sep" />
+          <div className="context-menu-item" onClick={() => onAction("create-sub-folder")}>
+            + 新建子文件夹
+          </div>
+          <div className="context-menu-sep" />
           <div className="context-menu-item" onClick={() => onAction("delete-folder")}>
             删除文件夹
           </div>
