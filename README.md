@@ -3,7 +3,7 @@
 <a href="https://pinmark.01mvp.com">
   <img src="https://img.shields.io/badge/website-pinmark.01mvp.com-blue" alt="Website">
 </a>
-<img src="https://img.shields.io/github/v/release/makerjackie/bookmark-cleaner" alt="Version">
+<img src="https://img.shields.io/github/v/release/makerjackie/pinmark" alt="Version">
 <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
 
 > **Pinmark** — A simple, fast bookmark manager for Chrome.
@@ -18,7 +18,7 @@
 
 ## 📸 Screenshot
 
-![Pinmark](https://raw.githubusercontent.com/makerjackie/bookmark-cleaner/main/website/screenshot.png)
+![Pinmark](https://raw.githubusercontent.com/makerjackie/pinmark/main/website/screenshot.png)
 
 > *Screenshot placeholder — replace with actual screenshot*
 
@@ -49,7 +49,7 @@
 
 ### Manual / 手动安装
 
-1. **Download** the latest ZIP from the [releases page](https://github.com/makerjackie/bookmark-cleaner/releases) or [pinmark.01mvp.com](https://pinmark.01mvp.com)
+1. **Download** the latest ZIP from the [releases page](https://github.com/makerjackie/pinmark/releases) or [pinmark.01mvp.com](https://pinmark.01mvp.com)
 2. **Extract** the ZIP to a local folder
 3. Open Chrome and go to `chrome://extensions`
 4. Enable **Developer mode** (top-right corner)
