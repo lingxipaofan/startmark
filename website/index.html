@@ -51,7 +51,7 @@
     <div class="hero-actions">
       <a href="pinmark-v1.0.0.zip" class="btn btn-primary" data-lang="zh">📦 下载 ZIP</a>
       <a href="pinmark-v1.0.0.zip" class="btn btn-primary" data-lang="en" hidden>📦 Download ZIP</a>
-      <a href="#" class="btn btn-secondary chrome-store-btn" data-lang="zh" title="即将上架">
+      <a href="https://chromewebstore.google.com/detail/pinmark/jlifmlipjbbllnfpdbmkbbcdomkeanid?hl=zh-CN&utm_source=ext_sidebar" class="btn btn-secondary chrome-store-btn" data-lang="zh" target="_blank" rel="noopener">
         <span class="store-icon">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/>
@@ -63,9 +63,8 @@
           </svg>
         </span>
         Chrome 商店
-        <span class="coming-soon-tip" data-lang="zh">即将上架</span>
       </a>
-      <a href="#" class="btn btn-secondary chrome-store-btn" data-lang="en" hidden title="Coming soon">
+      <a href="https://chromewebstore.google.com/detail/pinmark/jlifmlipjbbllnfpdbmkbbcdomkeanid?hl=zh-CN&utm_source=ext_sidebar" class="btn btn-secondary chrome-store-btn" data-lang="en" hidden target="_blank" rel="noopener">
         <span class="store-icon">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/>
@@ -77,7 +76,6 @@
           </svg>
         </span>
         Chrome Web Store
-        <span class="coming-soon-tip" data-lang="en">Coming soon</span>
       </a>
     </div>
   </section>
@@ -86,34 +84,36 @@
   <section class="section">
     <h2 data-lang="zh">📸 界面预览</h2>
     <h2 data-lang="en" hidden>📸 Screenshots</h2>
-    <div class="screenshots">
-      <div class="screenshot-card">
-        <a href="screenshot-1-grid.png" target="_blank">
-          <img src="screenshot-1-grid.png" alt="Grid View" class="screenshot-img" loading="lazy" />
-        </a>
-        <p class="screenshot-caption" data-lang="zh">导航模式 — 多列卡片布局，像浏览器首页一样展示书签</p>
-        <p class="screenshot-caption" data-lang="en" hidden>Grid View — browse bookmarks like a homepage</p>
+    <div class="carousel">
+      <button class="carousel-btn carousel-prev" aria-label="Previous" onclick="moveSlide(-1)">&#10094;</button>
+      <div class="carousel-track">
+        <div class="carousel-slide active">
+          <img src="screenshot-1-grid.png" alt="Grid View" class="carousel-img" />
+          <p class="carousel-caption" data-lang="zh">导航模式 — 多列卡片布局，像浏览器首页一样展示书签</p>
+          <p class="carousel-caption" data-lang="en" hidden>Grid View — browse bookmarks like a homepage</p>
+        </div>
+        <div class="carousel-slide">
+          <img src="screenshot-2-list.png" alt="List View" class="carousel-img" />
+          <p class="carousel-caption" data-lang="zh">列表模式 — 传统侧边栏文件夹树 + 书签列表</p>
+          <p class="carousel-caption" data-lang="en" hidden>List View — classic sidebar folder navigation</p>
+        </div>
+        <div class="carousel-slide">
+          <img src="screenshot-3-dark.png" alt="Dark Mode" class="carousel-img" />
+          <p class="carousel-caption" data-lang="zh">深色模式 — 护眼深色主题，自动记忆偏好</p>
+          <p class="carousel-caption" data-lang="en" hidden>Dark Mode — easy on the eyes, remembers preference</p>
+        </div>
+        <div class="carousel-slide">
+          <img src="screenshot-4-search.png" alt="Search" class="carousel-img" />
+          <p class="carousel-caption" data-lang="zh">搜索功能 — 实时搜索标题和 URL，⌘F 快速聚焦</p>
+          <p class="carousel-caption" data-lang="en" hidden>Search — real-time by title and URL, ⌘F shortcut</p>
+        </div>
       </div>
-      <div class="screenshot-card">
-        <a href="screenshot-2-list.png" target="_blank">
-          <img src="screenshot-2-list.png" alt="List View" class="screenshot-img" loading="lazy" />
-        </a>
-        <p class="screenshot-caption" data-lang="zh">列表模式 — 传统侧边栏文件夹树 + 书签列表</p>
-        <p class="screenshot-caption" data-lang="en" hidden>List View — classic sidebar folder navigation</p>
-      </div>
-      <div class="screenshot-card">
-        <a href="screenshot-3-dark.png" target="_blank">
-          <img src="screenshot-3-dark.png" alt="Dark Mode" class="screenshot-img" loading="lazy" />
-        </a>
-        <p class="screenshot-caption" data-lang="zh">深色模式 — 护眼深色主题，自动记忆偏好</p>
-        <p class="screenshot-caption" data-lang="en" hidden>Dark Mode — easy on the eyes, remembers preference</p>
-      </div>
-      <div class="screenshot-card">
-        <a href="screenshot-4-search.png" target="_blank">
-          <img src="screenshot-4-search.png" alt="Search" class="screenshot-img" loading="lazy" />
-        </a>
-        <p class="screenshot-caption" data-lang="zh">搜索功能 — 实时搜索标题和 URL，⌘F 快速聚焦</p>
-        <p class="screenshot-caption" data-lang="en" hidden>Search — real-time by title and URL, ⌘F shortcut</p>
+      <button class="carousel-btn carousel-next" aria-label="Next" onclick="moveSlide(1)">&#10095;</button>
+      <div class="carousel-dots">
+        <span class="carousel-dot active" onclick="goToSlide(0)"></span>
+        <span class="carousel-dot" onclick="goToSlide(1)"></span>
+        <span class="carousel-dot" onclick="goToSlide(2)"></span>
+        <span class="carousel-dot" onclick="goToSlide(3)"></span>
       </div>
     </div>
   </section>
@@ -213,9 +213,9 @@
       <div class="feature-card">
         <span class="feature-icon">⚡</span>
         <h3 data-lang="zh">轻量快速</h3>
-        <h3 data-lang="en" hidden">Lightweight &amp; Fast</h3>
+        <h3 data-lang="en" hidden>Lightweight &amp; Fast</h3>
         <p data-lang="zh">基于 WXT + React 构建，无冗余依赖，启动即用</p>
-        <p data-lang="en" hidden">Built with WXT + React, zero bloat, launches instantly</p>
+        <p data-lang="en" hidden>Built with WXT + React, zero bloat, launches instantly</p>
       </div>
     </div>
   </section>
@@ -257,12 +257,33 @@
     </div>
     <p class="footer-made">
       Made with ❤️ by <a href="https://github.com/makerjackie">@makerjackie</a>
+      <span class="footer-sep">·</span>
+      Powered by <a href="https://01mvp.com" target="_blank" rel="noopener">01mvp.com</a>
     </p>
   </footer>
 
 </main>
 
 <script>
+  let currentSlide = 0;
+  const totalSlides = 4;
+
+  function showSlide(n) {
+    const slides = document.querySelectorAll('.carousel-slide');
+    const dots = document.querySelectorAll('.carousel-dot');
+    slides.forEach(s => s.classList.remove('active'));
+    dots.forEach(d => d.classList.remove('active'));
+    currentSlide = (n + totalSlides) % totalSlides;
+    slides[currentSlide].classList.add('active');
+    dots[currentSlide].classList.add('active');
+  }
+
+  function moveSlide(n) { showSlide(currentSlide + n); }
+  function goToSlide(n) { showSlide(n); }
+
+  // Auto-advance every 5s
+  setInterval(() => moveSlide(1), 5000);
+
   function switchLang(lang) {
     document.querySelectorAll('[data-lang]').forEach(el => {
       el.hidden = el.getAttribute('data-lang') !== lang;
