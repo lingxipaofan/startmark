@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 
 export type Locale = "zh-CN" | "en" | "ja";
 
@@ -72,6 +72,9 @@ const messages: Record<Locale, Messages> = {
     edit_url: "编辑网址",
     rename_prompt: "新名称：",
     url_prompt: "新网址：",
+    rename_failed: "重命名失败",
+    edit_url_failed: "编辑网址失败",
+    delete_confirm: "确定要删除选中的 {count} 项吗？",
     check_complete: "检查完成",
     links_ok: "全部有效 ✓",
     broken_found: "发现 {count} 个失效链接",
@@ -140,6 +143,9 @@ const messages: Record<Locale, Messages> = {
     edit_url: "Edit URL",
     rename_prompt: "New name:",
     url_prompt: "New URL:",
+    rename_failed: "Failed to rename",
+    edit_url_failed: "Failed to update URL",
+    delete_confirm: "Delete {count} selected item(s)?",
     check_complete: "Check Complete",
     links_ok: "All valid ✓",
     broken_found: "Found {count} broken links",
@@ -208,6 +214,9 @@ const messages: Record<Locale, Messages> = {
     edit_url: "URLを編集",
     rename_prompt: "新しい名前：",
     url_prompt: "新しいURL：",
+    rename_failed: "名前の変更に失敗しました",
+    edit_url_failed: "URLの更新に失敗しました",
+    delete_confirm: "選択した {count} 件を削除しますか？",
     check_complete: "チェック完了",
     links_ok: "すべて有効 ✓",
     broken_found: "{count} 個の無効なリンクが見つかりました",
@@ -230,7 +239,7 @@ function detectLocale(): Locale {
   return "en";
 }
 
-function formatMessage(template: string, vars?: Record<string, string | number>): string {
+export function formatMessage(template: string, vars?: Record<string, string | number>): string {
   if (!vars) return template;
   return template.replace(/\{(\w+)\}/g, (_, key) =>
     vars[key] !== undefined ? String(vars[key]) : `{${key}}`
@@ -293,13 +302,21 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     [locale]
   );
 
-  const localeList = Object.entries(LOCALE_LABELS).map(([code, label]) => ({
-    code: code as Locale,
-    label,
-  }));
+  const localeList = useMemo(
+    () => Object.entries(LOCALE_LABELS).map(([code, label]) => ({
+      code: code as Locale,
+      label,
+    })),
+    []
+  );
+
+  const contextValue = useMemo(
+    () => ({ locale, t, setLocale, locales: localeList }),
+    [locale, localeList]
+  );
 
   return (
-    <I18nContext.Provider value={{ locale, t, setLocale, locales: localeList }}>
+    <I18nContext.Provider value={contextValue}>
       {children}
     </I18nContext.Provider>
   );

@@ -28,20 +28,6 @@ export default function BookmarkList({
     bookmarksRef.current = bookmarks;
   }, [bookmarks]);
 
-  // listen for bookmark-drop events from FolderTree
-  const dropHandler = useRef((e: Event) => {
-    const detail = (e as CustomEvent).detail;
-    if (detail?.bookmarkId && detail?.destinationId) {
-      onMove(detail.bookmarkId, detail.destinationId);
-    }
-  });
-
-  useEffect(() => {
-    const handler = dropHandler.current;
-    window.addEventListener("bookmark-drop", handler);
-    return () => window.removeEventListener("bookmark-drop", handler);
-  }, []);
-
   // Shift-click range selection
   const shiftSelectHandler = useCallback((e: Event) => {
     const { fromId, toId } = (e as CustomEvent).detail;

@@ -15,3 +15,11 @@ export interface ContextMenuState {
   type: "folder" | "bookmark";
   node: BookmarkNode;
 }
+
+export interface SavedTreeNode {
+  parentId?: string;
+  title: string;
+  url?: string;
+  index?: number;
+  children?: SavedTreeNode[];
+}

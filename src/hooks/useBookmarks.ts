@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { BookmarkNode } from "../lib/types";
 import { useI18n } from "../lib/i18n";
 import {
@@ -22,8 +22,8 @@ export function useBookmarks() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const refresh = useCallback(async () => {
-    const t = await loadBookmarkTree();
-    setTree(t);
+    const treeData = await loadBookmarkTree();
+    setTree(treeData);
   }, []);
 
   useEffect(() => {
@@ -37,23 +37,30 @@ export function useBookmarks() {
     }
   }, [tree, selectedFolder]);
 
-  const flatFolders = tree.length > 0 ? flattenTree(tree).filter(({ node }) => node.children) : [];
+  const flatFolders = useMemo(
+    () => flattenTree(tree).filter(({ node }) => node.children),
+    [tree]
+  );
 
-  const allBookmarks = tree.length > 0
-    ? flattenTree(tree)
-        .filter(({ node }) => !!node.url)
-        .map(({ node }) => node)
-    : [];
+  const allBookmarks = useMemo(
+    () => flattenTree(tree)
+      .filter(({ node }) => !!node.url)
+      .map(({ node }) => node),
+    [tree]
+  );
 
   const bookmarkCount = allBookmarks.length;
 
-  const filteredBookmarks = searchQuery
-    ? allBookmarks.filter(
-        (n) =>
-          n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (n.url || "").toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : allBookmarks;
+  const filteredBookmarks = useMemo(
+    () => searchQuery
+      ? allBookmarks.filter(
+          (n) =>
+            n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            n.url!.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      : allBookmarks,
+    [allBookmarks, searchQuery]
+  );
 
   const selectFolder = useCallback((id: string) => {
     setSelectedFolder(id);
@@ -110,9 +117,13 @@ export function useBookmarks() {
 
   const deleteFolder = useCallback(
     async (id: string) => {
-      await removeBookmarkTree(id);
-      setSelectedFolder(null);
-      await refresh();
+      try {
+        await removeBookmarkTree(id);
+        setSelectedFolder(null);
+        await refresh();
+      } catch {
+        // Folder deletion failed (e.g., already removed, API error)
+      }
     },
     [refresh]
   );
@@ -127,8 +138,8 @@ export function useBookmarks() {
     [refresh]
   );
 
-  const emptyFolders = tree.length > 0 ? findEmptyFolders(tree) : [];
-  const duplicateBookmarks = tree.length > 0 ? findDuplicateBookmarks(tree) : [];
+  const emptyFolders = useMemo(() => findEmptyFolders(tree), [tree]);
+  const duplicateBookmarks = useMemo(() => findDuplicateBookmarks(tree), [tree]);
 
   return {
     tree,

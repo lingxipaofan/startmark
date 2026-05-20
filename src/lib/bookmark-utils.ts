@@ -85,10 +85,6 @@ export async function moveBookmarkNode(id: string, parentId: string) {
   await chrome.bookmarks.move(id, { parentId });
 }
 
-export async function removeBookmarkNode(id: string) {
-  await chrome.bookmarks.remove(id);
-}
-
 export async function removeBookmarkTree(id: string) {
   await chrome.bookmarks.removeTree(id);
 }

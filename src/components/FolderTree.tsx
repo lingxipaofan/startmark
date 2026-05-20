@@ -109,7 +109,7 @@ function FolderNode({
     <div>
       <div
         className={`folder-item ${selectedFolder === node.id ? "selected" : ""} ${dragOver ? "drag-over" : ""}`}
-        style={{ paddingLeft: `${12 + depth * 16}px` }}
+        style={{ paddingLeft: `${12 + depth * 24}px` }}
         onClick={() => onSelect(node.id)}
         onContextMenu={(e) => onContextMenu(e, node)}
         draggable={canDrag}

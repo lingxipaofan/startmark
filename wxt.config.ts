@@ -5,10 +5,8 @@ export default defineConfig({
   modules: ["@wxt-dev/module-react"],
   manifest: {
     name: "Pinmark",
-    short_name: "Pinmark",
-    version: "1.2.0",
     description: "A minimal yet powerful bookmark manager for Chrome — organize, browse, search, and clean up with ease. 中文 · English · 日本語",
-    permissions: ["bookmarks", "tabs", "storage"],
+    permissions: ["bookmarks", "storage"],
     host_permissions: ["<all_urls>"],
     action: {},
     icons: {

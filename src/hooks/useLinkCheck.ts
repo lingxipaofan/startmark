@@ -12,12 +12,12 @@ interface CachedEntry {
 
 type LinkCache = Record<string, CachedEntry>;
 
-function now() {
-  return Date.now();
-}
-
 function brokenCountFromCache(cache: LinkCache): number {
   return Object.values(cache).filter((e) => e.status === "broken").length;
+}
+
+function brokenCountFromStatus(status: Map<string, LinkStatus>): number {
+  return [...status.values()].filter((value) => value === "broken").length;
 }
 
 export function useLinkCheck() {
@@ -27,6 +27,7 @@ export function useLinkCheck() {
   const [lastCheckedAt, setLastCheckedAt] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const abortRef = useRef(false);
+  const runningRef = useRef(false);
 
   // Load cached results from storage.local on mount
   useEffect(() => {
@@ -57,16 +58,12 @@ export function useLinkCheck() {
   // Persist current results to storage.local
   const persist = useCallback((map: Map<string, LinkStatus>) => {
     const cache: LinkCache = {};
-    const ts = now();
+    const ts = Date.now();
     for (const [id, status] of map) {
       if (status === "unknown") continue;
       cache[id] = { status, checkedAt: ts };
     }
-    try {
-      chrome.storage.local.set({ [STORAGE_KEY]: cache });
-    } catch {
-      // ignore
-    }
+    chrome.storage.local.set({ [STORAGE_KEY]: cache }).catch(() => {});
   }, []);
 
   const checkSingleLink = useCallback(async (url: string): Promise<boolean> => {
@@ -89,15 +86,16 @@ export function useLinkCheck() {
     }
   }, []);
 
-  const runCheck = useCallback(
+  const checkLinks = useCallback(
     async (bookmarks: { id: string; url: string }[]) => {
+      if (runningRef.current) return;
       if (bookmarks.length === 0) return;
 
+      runningRef.current = true;
       abortRef.current = false;
       setIsChecking(true);
 
       const newStatus = new Map(linkStatus);
-      let broken = 0;
 
       for (const bm of bookmarks) {
         newStatus.set(bm.id, "checking");
@@ -106,50 +104,44 @@ export function useLinkCheck() {
 
       const queue = [...bookmarks];
 
-      const processNext = async () => {
-        while (queue.length > 0 && !abortRef.current) {
-          const item = queue.shift()!;
-          const valid = await checkSingleLink(item.url);
-          if (abortRef.current) return;
-          newStatus.set(item.id, valid ? "valid" : "broken");
-          if (!valid) broken++;
-          setLinkStatus(new Map(newStatus));
-          setBrokenCount(
-            Object.values(Object.fromEntries(newStatus)).filter((s) => s === "broken").length
-          );
+      try {
+        const processNext = async () => {
+          while (queue.length > 0 && !abortRef.current) {
+            const item = queue.shift()!;
+            const valid = await checkSingleLink(item.url);
+            if (abortRef.current) return;
+            newStatus.set(item.id, valid ? "valid" : "broken");
+            setLinkStatus(new Map(newStatus));
+            setBrokenCount(brokenCountFromStatus(newStatus));
+          }
+        };
+
+        const workers: Promise<void>[] = [];
+        const workerCount = Math.min(MAX_CONCURRENT, bookmarks.length);
+        for (let i = 0; i < workerCount; i++) {
+          workers.push(processNext());
         }
-      };
+        await Promise.all(workers);
 
-      const workers: Promise<void>[] = [];
-      const workerCount = Math.min(MAX_CONCURRENT, bookmarks.length);
-      for (let i = 0; i < workerCount; i++) {
-        workers.push(processNext());
-      }
-      await Promise.all(workers);
-
-      if (!abortRef.current) {
+        if (!abortRef.current) {
+          setLastCheckedAt(Date.now());
+          persist(newStatus);
+        }
+      } finally {
         setIsChecking(false);
-        setLastCheckedAt(now());
-        persist(newStatus);
+        runningRef.current = false;
       }
     },
     [linkStatus, checkSingleLink, persist]
-  );
-
-  const checkLinks = useCallback(
-    (bookmarks: { id: string; url: string }[]) => {
-      return runCheck(bookmarks);
-    },
-    [runCheck]
   );
 
   const recheckBroken = useCallback(
     (bookmarks: { id: string; url: string }[]) => {
       const broken = bookmarks.filter((bm) => linkStatus.get(bm.id) === "broken");
       if (broken.length === 0) return;
-      return runCheck(broken);
+      return checkLinks(broken);
     },
-    [linkStatus, runCheck]
+    [linkStatus, checkLinks]
   );
 
   const resetLinkStatus = useCallback(() => {
@@ -158,11 +150,7 @@ export function useLinkCheck() {
     setLastCheckedAt(null);
     abortRef.current = true;
     setIsChecking(false);
-    try {
-      chrome.storage.local.remove(STORAGE_KEY);
-    } catch {
-      // ignore
-    }
+    chrome.storage.local.remove(STORAGE_KEY).catch(() => {});
   }, []);
 
   const getStatus = useCallback(

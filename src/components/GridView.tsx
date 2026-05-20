@@ -499,6 +499,15 @@ export default function GridView({
 
 // ─── Bookmark Card ───
 
+function safeFaviconUrl(url: string | undefined): string {
+  if (!url) return "";
+  try {
+    return `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=32`;
+  } catch {
+    return "";
+  }
+}
+
 function BookmarkCard({
   bm,
   isSelected,
@@ -535,7 +544,7 @@ function BookmarkCard({
       <span className="grid-card-check">{isSelected ? "◉" : "○"}</span>
       <img
         className="grid-card-favicon"
-        src={bm.url ? `https://www.google.com/s2/favicons?domain=${new URL(bm.url).hostname}&sz=32` : ""}
+        src={safeFaviconUrl(bm.url)}
         alt=""
         onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
       />

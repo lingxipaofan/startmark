@@ -33,6 +33,7 @@ export default function Header({
           ref={searchRef}
           type="text"
           placeholder={t("search_placeholder")}
+          aria-label={t("search_placeholder")}
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           className="search-input"

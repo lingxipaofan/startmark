@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useMemo } from "react";
 import { useBookmarks } from "../../src/hooks/useBookmarks";
 import { useLinkCheck } from "../../src/hooks/useLinkCheck";
 import Header from "../../src/components/Header";
@@ -10,7 +10,7 @@ import ContextMenu from "../../src/components/ContextMenu";
 import Toast from "../../src/components/Toast";
 import { logger } from "../../src/lib/logger";
 import { useI18n } from "../../src/lib/i18n";
-import type { BookmarkNode, ContextMenuState } from "../../src/lib/types";
+import type { BookmarkNode, ContextMenuState, SavedTreeNode } from "../../src/lib/types";
 
 const EXT_VERSION = chrome.runtime.getManifest().version;
 
@@ -26,7 +26,6 @@ export default function App() {
     toggleSelectAll,
     deleteSelected,
     moveBookmark,
-    deleteFolder,
     createFolder,
     refresh,
     searchQuery,
@@ -54,7 +53,6 @@ export default function App() {
     lastCheckedAt,
     checkLinks,
     recheckBroken,
-    resetLinkStatus,
     getStatus,
   } = useLinkCheck();
 
@@ -97,7 +95,9 @@ export default function App() {
         if (viewMode === "grid") {
           window.dispatchEvent(new CustomEvent("grid-delete-selected"));
         } else if (selectedBookmarkIds.size > 0) {
-          deleteSelected();
+          if (confirm(t("delete_confirm", { count: selectedBookmarkIds.size }))) {
+            deleteSelected();
+          }
         }
       }
     };
@@ -117,7 +117,7 @@ export default function App() {
   };
 
   // Save folder tree structure for undo
-  const saveFolderTree = useCallback((node: chrome.bookmarks.BookmarkTreeNode): any => ({
+  const saveFolderTree = useCallback((node: chrome.bookmarks.BookmarkTreeNode): SavedTreeNode => ({
     parentId: node.parentId,
     title: node.title,
     url: node.url,
@@ -167,7 +167,7 @@ export default function App() {
       await chrome.bookmarks.update(id, { title: name });
       await refresh();
     } catch {
-      showToast(t("delete_folder_failed"));
+      showToast(t("rename_failed"));
     }
   }, [refresh]);
 
@@ -179,13 +179,16 @@ export default function App() {
       await chrome.bookmarks.update(id, { url });
       await refresh();
     } catch {
-      showToast(t("link_check_error"));
+      showToast(t("edit_url_failed"));
     }
   }, [refresh]);
 
-  const currentBookmarks = selectedFolder
-    ? filteredBookmarks.filter((n) => n.parentId === selectedFolder)
-    : [];
+  const currentBookmarks = useMemo(
+    () => selectedFolder
+      ? filteredBookmarks.filter((n) => n.parentId === selectedFolder)
+      : [],
+    [selectedFolder, filteredBookmarks]
+  );
 
   // Check links for current view
   const handleCheckLinks = useCallback(() => {
@@ -208,6 +211,8 @@ export default function App() {
   // Wrap delete to support undo
   const deleteWithUndo = useCallback(
     async (ids: string[]) => {
+      if (ids.length === 0) return;
+      if (!confirm(t("delete_confirm", { count: ids.length }))) return;
       const saved: { id: string; node: chrome.bookmarks.BookmarkTreeNode }[] = [];
       for (const id of ids) {
         try {
@@ -296,6 +301,7 @@ export default function App() {
       await handleDeleteFolderWithUndo(node.id, node.title);
     }
     if (action === "delete-bookmark") {
+      if (!confirm(t("delete_confirm", { count: 1 }))) return;
       await chrome.bookmarks.remove(node.id);
       await refresh();
       showToast(t("deleted_bookmark_item", { title: node.title }));
@@ -338,11 +344,13 @@ export default function App() {
     }
   };
 
-  const currentFolderTitle =
-    selectedFolder && flatFolders.find((f) => f.node.id === selectedFolder)?.node.title;
+  const currentFolderTitle = useMemo(
+    () => selectedFolder && flatFolders.find((f) => f.node.id === selectedFolder)?.node.title,
+    [selectedFolder, flatFolders]
+  );
 
   return (
-    <div className={`app view-${viewMode}${darkMode ? " dark" : ""}`}>
+    <div className={`app view-${viewMode}`}>
       <Header
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -404,7 +412,7 @@ export default function App() {
               className="btn-new-folder"
               onClick={() => createFolder(selectedFolder || "1")}
             >
-              + 新建文件夹
+              {t("new_folder")}
             </button>
           </aside>
           <main className="bookmark-panel">
@@ -424,7 +432,11 @@ export default function App() {
                       currentBookmarks.every((b) => selectedBookmarkIds.has(b.id))
                     )
                   }
-                  onDeleteSelected={deleteSelected}
+                  onDeleteSelected={() => {
+                    if (confirm(t("delete_confirm", { count: selectedBookmarkIds.size }))) {
+                      deleteSelected();
+                    }
+                  }}
                   onCheckLinks={handleCheckLinks}
                   onRecheckBroken={handleRecheckBroken}
                   isCheckingLinks={isCheckingLinks}
