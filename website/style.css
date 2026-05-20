@@ -405,6 +405,61 @@ main {
   line-height: 1.5;
 }
 
+/* ===== Downloads ===== */
+.download-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 36px 0;
+  border-top: 1px solid var(--border-light);
+}
+
+.download-copy {
+  max-width: 520px;
+}
+
+.download-copy h2 {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.download-copy p {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.download-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.download-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.download-link:hover {
+  color: var(--accent);
+  border-color: var(--accent-ring);
+  background: var(--surface);
+}
+
 /* ===== Installation Steps (Horizontal) ===== */
 .install-section {
   padding: 64px 0;
@@ -612,6 +667,16 @@ footer {
   .feature-row-text h2 { font-size: 22px; }
 
   .more-grid { grid-template-columns: repeat(2, 1fr); }
+
+  .download-section {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .download-actions {
+    justify-content: center;
+  }
 
   .install-steps-h {
     flex-direction: column;
