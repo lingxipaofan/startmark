@@ -556,6 +556,7 @@ html.dark .bookmark-item.selected {
 /* Sort bar */
 .grid-sort-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 2px 0;
   column-span: all;
@@ -982,6 +983,11 @@ html.dark .bookmark-item.selected {
   transition: all 0.12s;
   color: var(--text-secondary);
   white-space: nowrap;
+}
+
+.toast-undo:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .link-broken-btn:hover {

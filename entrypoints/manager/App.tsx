@@ -24,7 +24,7 @@ export default function App() {
     selectedBookmarkIds,
     toggleBookmark,
     toggleSelectAll,
-    deleteSelected,
+    clearBookmarkSelection,
     moveBookmark,
     createFolder,
     refresh,
@@ -44,7 +44,10 @@ export default function App() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("pinmark-dark") === "true");
-  const [toast, setToast] = useState<{ message: string; onUndo?: () => void } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    onUndo?: () => void | Promise<void>;
+  } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const {
     isChecking: isCheckingLinks,
@@ -61,49 +64,6 @@ export default function App() {
     localStorage.setItem("pinmark-dark", String(darkMode));
   }, [darkMode]);
 
-  // Keyboard shortcuts
-  React.useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      // Don't trigger if typing in search
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-      if (e.key === "Escape") {
-        setContextMenu(null);
-        return;
-      }
-
-      // ⌘F / Ctrl+F → focus search
-      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
-        e.preventDefault();
-        searchRef.current?.focus();
-        return;
-      }
-
-      // ⌘A / Ctrl+A → select all (only in grid mode)
-      if ((e.metaKey || e.ctrlKey) && e.key === "a") {
-        if (viewMode === "grid") {
-          e.preventDefault();
-          // Trigger select all via the grid view
-          window.dispatchEvent(new CustomEvent("grid-select-all"));
-        }
-        return;
-      }
-
-      // Delete / Backspace → delete selected
-      if (e.key === "Delete" || e.key === "Backspace") {
-        if (viewMode === "grid") {
-          window.dispatchEvent(new CustomEvent("grid-delete-selected"));
-        } else if (selectedBookmarkIds.size > 0) {
-          if (confirm(t("delete_confirm", { count: selectedBookmarkIds.size }))) {
-            deleteSelected();
-          }
-        }
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [viewMode, selectedBookmarkIds, deleteSelected]);
-
   // Toast auto-dismiss
   React.useEffect(() => {
     if (!toast) return;
@@ -115,9 +75,9 @@ export default function App() {
     pruneLinkStatus(filteredBookmarks.map((bookmark) => bookmark.id));
   }, [filteredBookmarks, pruneLinkStatus]);
 
-  const showToast = (message: string, onUndo?: () => void) => {
+  const showToast = useCallback((message: string, onUndo?: () => void | Promise<void>) => {
     setToast({ message, onUndo });
-  };
+  }, []);
 
   // Save folder tree structure for undo
   const saveFolderTree = useCallback((node: chrome.bookmarks.BookmarkTreeNode): SavedTreeNode => ({
@@ -127,6 +87,22 @@ export default function App() {
     index: node.index,
     children: node.children?.map((c) => saveFolderTree(c)),
   }), []);
+
+  const restoreBookmarkTree = useCallback(async (
+    data: SavedTreeNode,
+    parentId = data.parentId || "1"
+  ): Promise<string> => {
+    const created = await chrome.bookmarks.create({
+      parentId,
+      title: data.title,
+      url: data.url,
+      index: data.index,
+    });
+    for (const child of data.children || []) {
+      await restoreBookmarkTree(child, created.id);
+    }
+    return created.id;
+  }, []);
 
   // Delete a folder with undo support
   const handleDeleteFolderWithUndo = useCallback(async (folderId: string, folderTitle: string) => {
@@ -138,29 +114,19 @@ export default function App() {
       showToast(
         t("deleted_folder", { title: folderTitle }),
         async () => {
-          // Restore recursively — first the root, then children inside it
-          const restore = async (data: any, parentId?: string): Promise<string> => {
-            const created = await chrome.bookmarks.create({
-              parentId: parentId || "1",
-              title: data.title,
-              url: data.url,
-              index: data.index,
-            });
-            if (data.children) {
-              for (const child of data.children) {
-                await restore(child, created.id);
-              }
-            }
-            return created.id;
-          };
-          await restore(saved);
-          await refresh();
+          try {
+            await restoreBookmarkTree(saved);
+            await refresh();
+          } catch (error) {
+            showToast(t("undo_failed"));
+            throw error;
+          }
         }
       );
     } catch {
       showToast(t("delete_folder_failed"));
     }
-  }, [saveFolderTree, refresh]);
+  }, [saveFolderTree, restoreBookmarkTree, refresh, showToast, t]);
 
   // Rename a bookmark or folder
   const handleRenameNode = useCallback(async (id: string, currentTitle: string) => {
@@ -221,42 +187,79 @@ export default function App() {
     async (ids: string[]) => {
       if (ids.length === 0) return;
       if (!confirm(t("delete_confirm", { count: ids.length }))) return;
-      const saved: { id: string; node: chrome.bookmarks.BookmarkTreeNode }[] = [];
+      const saved: SavedTreeNode[] = [];
       for (const id of ids) {
         try {
           const [node] = await chrome.bookmarks.get(id);
-          saved.push({ id, node });
-          await chrome.bookmarks.remove(id);
-        } catch {
-          try {
+          if (node.url) {
+            saved.push(saveFolderTree(node));
+            await chrome.bookmarks.remove(id);
+          } else {
             const [node] = await chrome.bookmarks.getSubTree(id);
-            saved.push({ id, node });
+            saved.push(saveFolderTree(node));
             await chrome.bookmarks.removeTree(id);
-          } catch {
-            // skip
           }
+        } catch {
+          // The item may already have been removed by another Chrome window.
         }
       }
       await refresh();
+      clearBookmarkSelection();
+      if (saved.length === 0) return;
       showToast(
         t("deleted_bookmarks", { count: saved.length }),
-        () => {
-          // Undo: re-create each
-          Promise.all(
-            saved.map(({ node }) =>
-              chrome.bookmarks.create({
-                parentId: node.parentId || "1",
-                title: node.title,
-                url: node.url,
-                index: node.index,
-              })
-            )
-          ).then(() => refresh());
+        async () => {
+          try {
+            const ordered = [...saved].sort((a, b) =>
+              (a.parentId || "1").localeCompare(b.parentId || "1") ||
+              (a.index ?? Number.MAX_SAFE_INTEGER) - (b.index ?? Number.MAX_SAFE_INTEGER)
+            );
+            for (const node of ordered) {
+              await restoreBookmarkTree(node);
+            }
+            await refresh();
+          } catch (error) {
+            showToast(t("undo_failed"));
+            throw error;
+          }
         }
       );
     },
-    [refresh]
+    [clearBookmarkSelection, refresh, restoreBookmarkTree, saveFolderTree, showToast, t]
   );
+
+  // Keyboard shortcuts
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.key === "Escape") {
+        setContextMenu(null);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        searchRef.current?.focus();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "a") {
+        if (viewMode === "grid") {
+          e.preventDefault();
+          window.dispatchEvent(new CustomEvent("grid-select-all"));
+        }
+        return;
+      }
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (viewMode === "grid") {
+          window.dispatchEvent(new CustomEvent("grid-delete-selected"));
+        } else if (selectedBookmarkIds.size > 0) {
+          deleteWithUndo([...selectedBookmarkIds]);
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [viewMode, selectedBookmarkIds, deleteWithUndo]);
 
   const handleFolderContextMenu = (e: React.MouseEvent, node: BookmarkNode) => {
     e.preventDefault();
@@ -309,10 +312,7 @@ export default function App() {
       await handleDeleteFolderWithUndo(node.id, node.title);
     }
     if (action === "delete-bookmark") {
-      if (!confirm(t("delete_confirm", { count: 1 }))) return;
-      await chrome.bookmarks.remove(node.id);
-      await refresh();
-      showToast(t("deleted_bookmark_item", { title: node.title }));
+      await deleteWithUndo([node.id]);
     }
     if (action === "open-all") {
       // Open all bookmarks in the folder
@@ -441,9 +441,7 @@ export default function App() {
                     )
                   }
                   onDeleteSelected={() => {
-                    if (confirm(t("delete_confirm", { count: selectedBookmarkIds.size }))) {
-                      deleteSelected();
-                    }
+                    deleteWithUndo([...selectedBookmarkIds]);
                   }}
                   onCheckLinks={handleCheckLinks}
                   onRecheckBroken={handleRecheckBroken}

@@ -25,7 +25,20 @@ interface FolderSection {
   breadcrumb: string[]; // ancestor titles, e.g. ["书签栏", "工作"]
 }
 
-type SortMode = "folder" | "time";
+type SortMode = "folder" | "alphabetical" | "time";
+type AlphabeticalDirection = "asc" | "desc";
+
+const SORT_MODE_KEY = "pinmark-grid-sort-mode";
+const ALPHABETICAL_DIRECTION_KEY = "pinmark-alphabetical-direction";
+
+function readSortMode(): SortMode {
+  const stored = localStorage.getItem(SORT_MODE_KEY);
+  return stored === "alphabetical" || stored === "time" ? stored : "folder";
+}
+
+function readAlphabeticalDirection(): AlphabeticalDirection {
+  return localStorage.getItem(ALPHABETICAL_DIRECTION_KEY) === "desc" ? "desc" : "asc";
+}
 
 export default function GridView({
   tree,
@@ -48,7 +61,9 @@ export default function GridView({
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showFolderPicker, setShowFolderPicker] = useState(false);
-  const [sortMode, setSortMode] = useState<SortMode>("folder");
+  const [sortMode, setSortMode] = useState<SortMode>(readSortMode);
+  const [alphabeticalDirection, setAlphabeticalDirection] =
+    useState<AlphabeticalDirection>(readAlphabeticalDirection);
   const dragData = useRef<string[] | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -82,6 +97,14 @@ export default function GridView({
   }, [tree]);
 
   useEffect(() => {
+    localStorage.setItem(SORT_MODE_KEY, sortMode);
+  }, [sortMode]);
+
+  useEffect(() => {
+    localStorage.setItem(ALPHABETICAL_DIRECTION_KEY, alphabeticalDirection);
+  }, [alphabeticalDirection]);
+
+  useEffect(() => {
     if (!showFolderPicker) return;
     const handler = (e: MouseEvent) => {
       if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
@@ -109,7 +132,7 @@ export default function GridView({
       window.removeEventListener("grid-select-all", onSelectAll);
       window.removeEventListener("grid-delete-selected", onDelete);
     };
-  }, [sections, sortMode, selectedIds]);
+  }, [sections, sortMode, selectedIds, alphabeticalDirection, searchQuery]);
 
   // Time-sorted — oldest first
   const timeSortedBookmarks = useMemo(() => {
@@ -157,6 +180,23 @@ export default function GridView({
         .filter((s) => s.bookmarks.length > 0)
     : sections;
 
+  const displayedFolderSections = useMemo(() => {
+    if (sortMode !== "alphabetical") return filteredSections;
+
+    const collator = new Intl.Collator(undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+    const direction = alphabeticalDirection === "asc" ? 1 : -1;
+
+    return filteredSections.map((section) => ({
+      ...section,
+      bookmarks: [...section.bookmarks].sort(
+        (a, b) => direction * collator.compare(a.title || a.url || "", b.title || b.url || "")
+      ),
+    }));
+  }, [filteredSections, sortMode, alphabeticalDirection]);
+
   const totalSelected = selectedIds.size;
 
   const toggleSection = (id: string) => {
@@ -176,8 +216,8 @@ export default function GridView({
     }
     // Shift+click for range selection
     if (e.shiftKey && selectedIds.size > 0) {
-      const items = sortMode === "folder"
-        ? filteredSections.flatMap((s) => s.bookmarks)
+      const items = sortMode !== "time"
+        ? displayedFolderSections.flatMap((s) => s.bookmarks)
         : timeGroups.flatMap((g) => g.bookmarks);
       const lastSelected = [...selectedIds].pop()!;
       const lastIdx = items.findIndex((b) => b.id === lastSelected);
@@ -207,7 +247,7 @@ export default function GridView({
 
   const selectAll = () => {
     const all = new Set<string>();
-    const items = sortMode === "folder" ? filteredSections : timeGroups;
+    const items = sortMode !== "time" ? displayedFolderSections : timeGroups;
     for (const s of items) {
       for (const b of s.bookmarks) all.add(b.id);
     }
@@ -300,7 +340,7 @@ export default function GridView({
     setFolderMenu(null);
   };
 
-  const hasItems = sortMode === "folder" ? filteredSections.length > 0 : timeGroups.length > 0;
+  const hasItems = sortMode !== "time" ? displayedFolderSections.length > 0 : timeGroups.length > 0;
 
   if (!hasItems) {
     return (
@@ -318,7 +358,21 @@ export default function GridView({
           className={`sort-btn ${sortMode === "folder" ? "active" : ""}`}
           onClick={() => { setSortMode("folder"); clearSelection(); }}
         >
-          {t("sort_by_folder")}
+          {t("sort_custom")}
+        </button>
+        <button
+          className={`sort-btn ${sortMode === "alphabetical" ? "active" : ""}`}
+          onClick={() => {
+            if (sortMode === "alphabetical") {
+              setAlphabeticalDirection((current) => current === "asc" ? "desc" : "asc");
+            } else {
+              setSortMode("alphabetical");
+            }
+            clearSelection();
+          }}
+          title={t("sort_alphabetical_hint")}
+        >
+          {alphabeticalDirection === "asc" ? t("sort_name_asc") : t("sort_name_desc")}
         </button>
         <button
           className={`sort-btn ${sortMode === "time" ? "active" : ""}`}
@@ -346,7 +400,7 @@ export default function GridView({
               className="sort-btn link-broken-btn"
               onClick={() => {
                 const all = new Set<string>();
-                for (const s of (sortMode === "folder" ? filteredSections : timeGroups)) {
+                for (const s of (sortMode !== "time" ? displayedFolderSections : timeGroups)) {
                   for (const b of s.bookmarks) {
                     if (getLinkStatus && getLinkStatus(b.id) === "broken") all.add(b.id);
                   }
@@ -388,8 +442,8 @@ export default function GridView({
       )}
 
       {/* Folder mode — each folder = one column */}
-      {sortMode === "folder" &&
-        filteredSections.map((section) => (
+      {sortMode !== "time" &&
+        displayedFolderSections.map((section) => (
           <div
             key={section.folder.id}
             data-folder-id={section.folder.id}

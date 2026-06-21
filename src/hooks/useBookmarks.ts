@@ -90,6 +90,10 @@ export function useBookmarks() {
     []
   );
 
+  const clearBookmarkSelection = useCallback(() => {
+    setSelectedBookmarkIds(new Set());
+  }, []);
+
   const deleteSelected = useCallback(async () => {
     for (const id of selectedBookmarkIds) {
       try {
@@ -149,6 +153,7 @@ export function useBookmarks() {
     selectedBookmarkIds,
     toggleBookmark,
     toggleSelectAll,
+    clearBookmarkSelection,
     deleteSelected,
     moveBookmark,
     deleteFolder,
