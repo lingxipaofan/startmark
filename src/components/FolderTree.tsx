@@ -83,7 +83,6 @@ function FolderNode({
   const inputRef = useRef<HTMLInputElement>(null);
   const cancelEditRef = useRef(false);
   const { t } = useI18n();
-  const hasChildren = node.children && node.children.length > 0;
   const canRename = node.parentId !== "0";
   const childFolders = useMemo(
     () => sortBookmarkNodes(
@@ -93,6 +92,7 @@ function FolderNode({
     ),
     [node.children, sortMode, alphabeticalDirection]
   );
+  const hasChildFolders = childFolders.length > 0;
 
   useEffect(() => {
     if (!isEditing) setDraftTitle(node.title);
@@ -199,7 +199,7 @@ function FolderNode({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {hasChildren && (
+        {hasChildFolders && (
           <span
             className="folder-toggle"
             onClick={(e) => {
@@ -237,7 +237,7 @@ function FolderNode({
           <span className="folder-badge">{t("bookmark_bar")}</span>
         )}
       </div>
-      {hasChildren && !collapsed && (
+      {hasChildFolders && !collapsed && (
         <div>
           {childFolders.map((child) =>
             (

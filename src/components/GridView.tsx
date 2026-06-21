@@ -26,6 +26,7 @@ interface Props {
   onSortModeChange: (mode: SortMode) => void;
   alphabeticalDirection: AlphabeticalDirection;
   onAlphabeticalDirectionChange: (direction: AlphabeticalDirection) => void;
+  locatedFolderId: string | null;
 }
 
 interface FolderSection {
@@ -53,6 +54,7 @@ export default function GridView({
   onSortModeChange,
   alphabeticalDirection,
   onAlphabeticalDirectionChange,
+  locatedFolderId,
 }: Props) {
   const { t } = useI18n();
   const [sections, setSections] = useState<FolderSection[]>([]);
@@ -430,7 +432,7 @@ export default function GridView({
           <div
             key={section.folder.id}
             data-folder-id={section.folder.id}
-            className={`grid-section ${dragOverFolder === section.folder.id ? "drag-over" : ""}`}
+            className={`grid-section ${dragOverFolder === section.folder.id ? "drag-over" : ""} ${locatedFolderId === section.folder.id ? "located" : ""}`}
             onDragOver={(e) => { e.preventDefault(); setDragOverFolder(section.folder.id); }}
             onDragLeave={() => setDragOverFolder(null)}
             onDrop={(e) => handleSectionDrop(e, section.folder.id)}

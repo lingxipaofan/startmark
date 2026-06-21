@@ -369,10 +369,13 @@ export default function App() {
 
   const handleGridFolderSelect = (id: string) => {
     selectFolder(id);
-    const el = document.querySelector(`[data-folder-id="${id}"]`);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    if (sortMode === "time") setSortMode("folder");
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-folder-id="${CSS.escape(id)}"]`);
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    });
   };
 
   const handleGridDropBookmarks = async (ids: string[], destinationFolderId: string) => {
@@ -439,6 +442,7 @@ export default function App() {
               onSortModeChange={setSortMode}
               alphabeticalDirection={alphabeticalDirection}
               onAlphabeticalDirectionChange={setAlphabeticalDirection}
+              locatedFolderId={selectedFolder}
             />
           </main>
         </div>

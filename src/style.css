@@ -727,6 +727,14 @@ html.dark .bookmark-item.selected {
   box-shadow: 0 0 0 2px var(--drag-over-border), 0 2px 12px var(--drag-over-shadow);
 }
 
+.grid-section.located {
+  box-shadow: 0 0 0 2px var(--accent), 0 3px 12px var(--section-shadow);
+}
+
+.grid-section.located .grid-section-header {
+  background: var(--card-selected);
+}
+
 .grid-section-header {
   display: flex;
   align-items: center;
