@@ -12,7 +12,6 @@ export type LinkStatus = "unknown" | "valid" | "broken" | "checking";
 export interface ContextMenuState {
   x: number;
   y: number;
-  type: "folder" | "bookmark";
   node: BookmarkNode;
 }
 

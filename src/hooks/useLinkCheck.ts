@@ -7,7 +7,6 @@ const STORAGE_KEY = "pinmark-link-cache";
 
 interface CachedEntry {
   status: LinkStatus;
-  checkedAt: number;
 }
 
 type LinkCache = Record<string, CachedEntry>;
@@ -24,7 +23,6 @@ export function useLinkCheck() {
   const [linkStatus, setLinkStatus] = useState<Map<string, LinkStatus>>(new Map());
   const [isChecking, setIsChecking] = useState(false);
   const [brokenCount, setBrokenCount] = useState(0);
-  const [lastCheckedAt, setLastCheckedAt] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const abortRef = useRef(false);
   const runningRef = useRef(false);
@@ -42,12 +40,6 @@ export function useLinkCheck() {
         setLinkStatus(map);
         setBrokenCount(brokenCountFromCache(cache));
 
-        // Find most recent check time
-        let latest = 0;
-        for (const entry of Object.values(cache)) {
-          if (entry.checkedAt > latest) latest = entry.checkedAt;
-        }
-        if (latest > 0) setLastCheckedAt(latest);
       } catch {
         // storage unavailable
       }
@@ -58,10 +50,9 @@ export function useLinkCheck() {
   // Persist current results to storage.local
   const persist = useCallback((map: Map<string, LinkStatus>) => {
     const cache: LinkCache = {};
-    const ts = Date.now();
     for (const [id, status] of map) {
       if (status === "unknown") continue;
-      cache[id] = { status, checkedAt: ts };
+      cache[id] = { status };
     }
     chrome.storage.local.set({ [STORAGE_KEY]: cache }).catch(() => {});
   }, []);
@@ -124,7 +115,6 @@ export function useLinkCheck() {
         await Promise.all(workers);
 
         if (!abortRef.current) {
-          setLastCheckedAt(Date.now());
           persist(newStatus);
         }
       } finally {
@@ -135,19 +125,9 @@ export function useLinkCheck() {
     [linkStatus, checkSingleLink, persist]
   );
 
-  const recheckBroken = useCallback(
-    (bookmarks: { id: string; url: string }[]) => {
-      const broken = bookmarks.filter((bm) => linkStatus.get(bm.id) === "broken");
-      if (broken.length === 0) return;
-      return checkLinks(broken);
-    },
-    [linkStatus, checkLinks]
-  );
-
   const resetLinkStatus = useCallback(() => {
     setLinkStatus(new Map());
     setBrokenCount(0);
-    setLastCheckedAt(null);
     abortRef.current = true;
     setIsChecking(false);
     chrome.storage.local.remove(STORAGE_KEY).catch(() => {});
@@ -190,9 +170,7 @@ export function useLinkCheck() {
     linkStatus,
     isChecking,
     brokenCount,
-    lastCheckedAt,
     checkLinks,
-    recheckBroken,
     resetLinkStatus,
     pruneLinkStatus,
     getStatus,

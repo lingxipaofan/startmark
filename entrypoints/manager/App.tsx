@@ -2,9 +2,6 @@ import React, { useState, useRef, useCallback, useMemo } from "react";
 import { useBookmarks } from "../../src/hooks/useBookmarks";
 import { useLinkCheck } from "../../src/hooks/useLinkCheck";
 import Header from "../../src/components/Header";
-import FolderTree from "../../src/components/FolderTree";
-import BookmarkList from "../../src/components/BookmarkList";
-import ToolBar from "../../src/components/ToolBar";
 import GridView from "../../src/components/GridView";
 import ContextMenu from "../../src/components/ContextMenu";
 import Toast from "../../src/components/Toast";
@@ -27,14 +24,6 @@ export default function App() {
   const { t } = useI18n();
   const {
     tree,
-    flatFolders,
-    selectedFolder,
-    selectFolder,
-    clearFolderSelection,
-    selectedBookmarkIds,
-    toggleBookmark,
-    toggleSelectAll,
-    clearBookmarkSelection,
     moveBookmark,
     createFolder,
     refresh,
@@ -42,8 +31,6 @@ export default function App() {
     setSearchQuery,
     filteredBookmarks,
     bookmarkCount,
-    emptyFolders,
-    duplicateBookmarks,
   } = useBookmarks();
 
   // Log startup
@@ -52,7 +39,6 @@ export default function App() {
   }, []);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("pinmark-dark") === "true");
   const [sortMode, setSortMode] = useState<SortMode>(readSortMode);
   const [alphabeticalDirection, setAlphabeticalDirection] =
@@ -67,9 +53,7 @@ export default function App() {
   const searchRef = useRef<HTMLInputElement>(null);
   const {
     isChecking: isCheckingLinks,
-    lastCheckedAt,
     checkLinks,
-    recheckBroken,
     pruneLinkStatus,
     getStatus,
   } = useLinkCheck();
@@ -168,16 +152,6 @@ export default function App() {
     }
   }, [refresh]);
 
-  const handleInlineRename = useCallback(async (id: string, title: string) => {
-    try {
-      await chrome.bookmarks.update(id, { title });
-      await refresh();
-    } catch (error) {
-      showToast(t("rename_failed"));
-      throw error;
-    }
-  }, [refresh, showToast, t]);
-
   // Edit a bookmark's URL
   const handleEditUrl = useCallback(async (id: string, currentUrl: string) => {
     const url = prompt(t("url_prompt"), currentUrl);
@@ -190,13 +164,6 @@ export default function App() {
     }
   }, [refresh]);
 
-  const currentBookmarks = useMemo(
-    () => selectedFolder
-      ? filteredBookmarks.filter((n) => n.parentId === selectedFolder)
-      : [],
-    [selectedFolder, filteredBookmarks]
-  );
-
   const visibleBrokenCount = useMemo(
     () => filteredBookmarks.filter((bookmark) => getStatus(bookmark.id) === "broken").length,
     [filteredBookmarks, getStatus]
@@ -204,66 +171,39 @@ export default function App() {
 
   // Check links for current view
   const handleCheckLinks = useCallback(() => {
-    const bookmarksWithUrls = viewMode === "grid"
-      ? filteredBookmarks.filter((b) => b.url).map((b) => ({ id: b.id, url: b.url! }))
-      : currentBookmarks.filter((b) => b.url).map((b) => ({ id: b.id, url: b.url! }));
+    const bookmarksWithUrls = filteredBookmarks
+      .filter((b) => b.url)
+      .map((b) => ({ id: b.id, url: b.url! }));
     if (bookmarksWithUrls.length === 0) return;
     checkLinks(bookmarksWithUrls);
     showToast(t("checking_links", { count: bookmarksWithUrls.length }));
-  }, [viewMode, filteredBookmarks, currentBookmarks, checkLinks]);
+  }, [filteredBookmarks, checkLinks, showToast, t]);
 
-  // Re-check only broken links
-  const handleRecheckBroken = useCallback(() => {
-    const bookmarksWithUrls = viewMode === "grid"
-      ? filteredBookmarks.filter((b) => b.url).map((b) => ({ id: b.id, url: b.url! }))
-      : currentBookmarks.filter((b) => b.url).map((b) => ({ id: b.id, url: b.url! }));
-    recheckBroken(bookmarksWithUrls);
-  }, [viewMode, filteredBookmarks, currentBookmarks, recheckBroken]);
-
-  // Wrap delete to support undo
-  const deleteWithUndo = useCallback(
-    async (ids: string[]) => {
-      if (ids.length === 0) return;
-      if (!confirm(t("delete_confirm", { count: ids.length }))) return;
-      const saved: SavedTreeNode[] = [];
-      for (const id of ids) {
-        try {
-          const [node] = await chrome.bookmarks.get(id);
-          if (node.url) {
-            saved.push(saveFolderTree(node));
-            await chrome.bookmarks.remove(id);
-          } else {
-            const [node] = await chrome.bookmarks.getSubTree(id);
-            saved.push(saveFolderTree(node));
-            await chrome.bookmarks.removeTree(id);
-          }
-        } catch {
-          // The item may already have been removed by another Chrome window.
-        }
-      }
-      await refresh();
-      clearBookmarkSelection();
-      if (saved.length === 0) return;
-      showToast(
-        t("deleted_bookmarks", { count: saved.length }),
-        async () => {
-          try {
-            const ordered = [...saved].sort((a, b) =>
-              (a.parentId || "1").localeCompare(b.parentId || "1") ||
-              (a.index ?? Number.MAX_SAFE_INTEGER) - (b.index ?? Number.MAX_SAFE_INTEGER)
-            );
-            for (const node of ordered) {
-              await restoreBookmarkTree(node);
+  const deleteBookmarkWithUndo = useCallback(
+    async (id: string) => {
+      if (!confirm(t("delete_confirm", { count: 1 }))) return;
+      try {
+        const [node] = await chrome.bookmarks.get(id);
+        const saved = saveFolderTree(node);
+        await chrome.bookmarks.remove(id);
+        await refresh();
+        showToast(
+          t("deleted_bookmark_item", { title: node.title }),
+          async () => {
+            try {
+              await restoreBookmarkTree(saved);
+              await refresh();
+            } catch (error) {
+              showToast(t("undo_failed"));
+              throw error;
             }
-            await refresh();
-          } catch (error) {
-            showToast(t("undo_failed"));
-            throw error;
           }
-        }
-      );
+        );
+      } catch {
+        // The bookmark may already have been removed by another Chrome window.
+      }
     },
-    [clearBookmarkSelection, refresh, restoreBookmarkTree, saveFolderTree, showToast, t]
+    [refresh, restoreBookmarkTree, saveFolderTree, showToast, t]
   );
 
   // Keyboard shortcuts
@@ -280,36 +220,10 @@ export default function App() {
         searchRef.current?.focus();
         return;
       }
-      if ((e.metaKey || e.ctrlKey) && e.key === "a") {
-        if (viewMode === "grid") {
-          e.preventDefault();
-          window.dispatchEvent(new CustomEvent("grid-select-all"));
-        }
-        return;
-      }
-      if (e.key === "Delete" || e.key === "Backspace") {
-        if (viewMode === "grid") {
-          window.dispatchEvent(new CustomEvent("grid-delete-selected"));
-        } else if (selectedBookmarkIds.size > 0) {
-          deleteWithUndo([...selectedBookmarkIds]);
-        }
-      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [viewMode, selectedBookmarkIds, deleteWithUndo]);
-
-  const handleFolderContextMenu = (e: React.MouseEvent, node: BookmarkNode) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (node.id === "0" || node.id === "1") return;
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      type: "folder",
-      node,
-    });
-  };
+  }, []);
 
   const handleBookmarkContextMenu = (e: React.MouseEvent, node: BookmarkNode) => {
     e.preventDefault();
@@ -317,7 +231,6 @@ export default function App() {
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
-      type: "bookmark",
       node,
     });
   };
@@ -326,13 +239,8 @@ export default function App() {
     if (!contextMenu) return;
     const node = contextMenu.node!;
 
-    if (action === "create-sub-folder") {
-      createFolder(node.id);
-      setContextMenu(null);
-      return;
-    }
-    if (action === "rename-folder") {
-      handleRenameNode(node.id, node.title);
+    if (action === "open-new-window") {
+      if (node.url) await chrome.windows.create({ url: node.url });
       setContextMenu(null);
       return;
     }
@@ -346,26 +254,8 @@ export default function App() {
       setContextMenu(null);
       return;
     }
-    if (action === "delete-folder") {
-      await handleDeleteFolderWithUndo(node.id, node.title);
-    }
     if (action === "delete-bookmark") {
-      await deleteWithUndo([node.id]);
-    }
-    if (action === "open-all") {
-      // Open all bookmarks in the folder
-      const urls: string[] = [];
-      const collect = (nodes: BookmarkNode[]) => {
-        for (const n of nodes) {
-          if (n.url) urls.push(n.url);
-          if (n.children) collect(n.children);
-        }
-      };
-      collect(node.children || []);
-      for (const url of urls) {
-        chrome.tabs.create({ url });
-      }
-      showToast(t("opened_bookmarks", { count: urls.length }));
+      await deleteBookmarkWithUndo(node.id);
     }
     setContextMenu(null);
   };
@@ -376,36 +266,12 @@ export default function App() {
     return () => window.removeEventListener("click", close);
   }, []);
 
-  const handleGridFolderSelect = (id: string) => {
-    selectFolder(id);
-    if (sortMode === "time") setSortMode("folder");
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const el = document.querySelector(`[data-folder-id="${CSS.escape(id)}"]`);
-        el?.scrollIntoView({ behavior: "smooth", block: "center" });
-      });
-    });
-  };
-
-  const handleGridDropBookmarks = async (ids: string[], destinationFolderId: string) => {
-    for (const id of ids) {
-      await moveBookmark(id, destinationFolderId);
-    }
-  };
-
-  const currentFolderTitle = useMemo(
-    () => selectedFolder && flatFolders.find((f) => f.node.id === selectedFolder)?.node.title,
-    [selectedFolder, flatFolders]
-  );
-
   return (
-    <div className={`app view-${viewMode}`}>
+    <div className="app">
       <Header
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         bookmarkCount={bookmarkCount}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
         darkMode={darkMode}
         onDarkModeChange={setDarkMode}
         simplifyTitles={simplifyTitles}
@@ -413,124 +279,33 @@ export default function App() {
         searchRef={searchRef}
       />
 
-      {viewMode === "grid" ? (
-        <div className="main-layout">
-          <aside className="folder-panel">
-            <FolderTree
-              tree={tree}
-              selectedFolder={selectedFolder}
-              onSelect={handleGridFolderSelect}
-              onContextMenu={handleFolderContextMenu}
-              onDropBookmarks={handleGridDropBookmarks}
-              onRename={handleInlineRename}
-              sortMode={sortMode}
-              alphabeticalDirection={alphabeticalDirection}
-            />
-            <button
-              className="btn-new-folder"
-              onClick={() => createFolder(selectedFolder || "1")}
-            >
-              {t("new_folder")}
-            </button>
-          </aside>
-          <main className="grid-layout">
-            <GridView
-              tree={tree}
-              searchQuery={searchQuery}
-              onMove={moveBookmark}
-              onDeleteSelected={deleteWithUndo}
-              onDeleteFolder={handleDeleteFolderWithUndo}
-              onCreateSubFolder={createFolder}
-              onContextMenu={handleBookmarkContextMenu}
-              onRename={handleRenameNode}
-              onCheckLinks={handleCheckLinks}
-              onRecheckBroken={handleRecheckBroken}
-              isCheckingLinks={isCheckingLinks}
-              brokenCount={visibleBrokenCount}
-              lastCheckedAt={lastCheckedAt}
-              getLinkStatus={getStatus}
-              sortMode={sortMode}
-              onSortModeChange={setSortMode}
-              alphabeticalDirection={alphabeticalDirection}
-              onAlphabeticalDirectionChange={setAlphabeticalDirection}
-              locatedFolderId={selectedFolder}
-              onClearSelection={clearFolderSelection}
-              simplifyTitles={simplifyTitles}
-            />
-          </main>
-        </div>
-      ) : (
-        <div className="main-layout">
-          <aside className="folder-panel">
-            <FolderTree
-              tree={tree}
-              selectedFolder={selectedFolder}
-              onSelect={selectFolder}
-              onContextMenu={handleFolderContextMenu}
-              onDropBookmarks={handleGridDropBookmarks}
-              onRename={handleInlineRename}
-              sortMode={sortMode}
-              alphabeticalDirection={alphabeticalDirection}
-            />
-            <button
-              className="btn-new-folder"
-              onClick={() => createFolder(selectedFolder || "1")}
-            >
-              {t("new_folder")}
-            </button>
-          </aside>
-          <main className="bookmark-panel">
-            {selectedFolder ? (
-              <>
-                <ToolBar
-                  folderTitle={currentFolderTitle || ""}
-                  bookmarkCount={currentBookmarks.length}
-                  selectedCount={selectedBookmarkIds.size}
-                  allSelected={
-                    currentBookmarks.length > 0 &&
-                    currentBookmarks.every((b) => selectedBookmarkIds.has(b.id))
-                  }
-                  onToggleSelectAll={() =>
-                    toggleSelectAll(
-                      currentBookmarks.map((b) => b.id),
-                      currentBookmarks.every((b) => selectedBookmarkIds.has(b.id))
-                    )
-                  }
-                  onDeleteSelected={() => {
-                    deleteWithUndo([...selectedBookmarkIds]);
-                  }}
-                  onCheckLinks={handleCheckLinks}
-                  onRecheckBroken={handleRecheckBroken}
-                  isCheckingLinks={isCheckingLinks}
-                  brokenCount={visibleBrokenCount}
-                  lastCheckedAt={lastCheckedAt}
-                  emptyFolders={emptyFolders}
-                  duplicateBookmarks={duplicateBookmarks}
-                />
-                <BookmarkList
-                  bookmarks={currentBookmarks}
-                  selectedIds={selectedBookmarkIds}
-                  onToggle={toggleBookmark}
-                  onMove={moveBookmark}
-                  onContextMenu={handleBookmarkContextMenu}
-                  getLinkStatus={getStatus}
-                  simplifyTitles={simplifyTitles}
-                />
-              </>
-            ) : (
-              <div className="empty-state">
-                <p>{t("select_folder_hint")}</p>
-              </div>
-            )}
-          </main>
-        </div>
-      )}
+      <div className="main-layout">
+        <main className="grid-layout">
+          <GridView
+            tree={tree}
+            searchQuery={searchQuery}
+            onMove={moveBookmark}
+            onDeleteFolder={handleDeleteFolderWithUndo}
+            onCreateSubFolder={createFolder}
+            onContextMenu={handleBookmarkContextMenu}
+            onRename={handleRenameNode}
+            onCheckLinks={handleCheckLinks}
+            isCheckingLinks={isCheckingLinks}
+            brokenCount={visibleBrokenCount}
+            getLinkStatus={getStatus}
+            sortMode={sortMode}
+            onSortModeChange={setSortMode}
+            alphabeticalDirection={alphabeticalDirection}
+            onAlphabeticalDirectionChange={setAlphabeticalDirection}
+            simplifyTitles={simplifyTitles}
+          />
+        </main>
+      </div>
 
       {contextMenu && (
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          type={contextMenu.type}
           onAction={handleContextMenuAction}
         />
       )}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { ArrowUpDown, Check, Link2, LoaderCircle } from "lucide-react";
 import type { BookmarkNode, LinkStatus } from "../lib/types";
 import { useI18n, formatRelativeTime, timeBucket } from "../lib/i18n";
 import {
@@ -12,23 +13,18 @@ interface Props {
   tree: BookmarkNode[];
   searchQuery: string;
   onMove: (id: string, destinationFolderId: string) => void;
-  onDeleteSelected: (ids: string[]) => void;
   onDeleteFolder?: (folderId: string, folderTitle: string) => void;
   onCreateSubFolder?: (parentId: string) => void;
   onContextMenu: (e: React.MouseEvent, node: BookmarkNode) => void;
   onRename?: (id: string, currentTitle: string) => void;
   onCheckLinks?: () => void;
-  onRecheckBroken?: () => void;
   isCheckingLinks?: boolean;
   brokenCount?: number;
-  lastCheckedAt?: number | null;
   getLinkStatus?: (id: string) => LinkStatus;
   sortMode: SortMode;
   onSortModeChange: (mode: SortMode) => void;
   alphabeticalDirection: AlphabeticalDirection;
   onAlphabeticalDirectionChange: (direction: AlphabeticalDirection) => void;
-  locatedFolderId: string | null;
-  onClearSelection: () => void;
   simplifyTitles: boolean;
 }
 
@@ -42,33 +38,27 @@ export default function GridView({
   tree,
   searchQuery,
   onMove,
-  onDeleteSelected,
   onDeleteFolder,
   onCreateSubFolder,
   onContextMenu,
   onRename,
   onCheckLinks,
-  onRecheckBroken,
   isCheckingLinks,
   brokenCount,
-  lastCheckedAt,
   getLinkStatus,
   sortMode,
   onSortModeChange,
   alphabeticalDirection,
   onAlphabeticalDirectionChange,
-  locatedFolderId,
-  onClearSelection,
   simplifyTitles,
 }: Props) {
   const { t } = useI18n();
   const [sections, setSections] = useState<FolderSection[]>([]);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [showSortMenu, setShowSortMenu] = useState(false);
   const dragData = useRef<string[] | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
-  const pickerRef = useRef<HTMLDivElement>(null);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
   const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; node: BookmarkNode } | null>(null);
 
   // Build sections: each folder with bookmarks or sub-folders = one column
@@ -94,15 +84,15 @@ export default function GridView({
   }, [tree]);
 
   useEffect(() => {
-    if (!showFolderPicker) return;
+    if (!showSortMenu) return;
     const handler = (e: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setShowFolderPicker(false);
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
+        setShowSortMenu(false);
       }
     };
     setTimeout(() => document.addEventListener("click", handler), 0);
     return () => document.removeEventListener("click", handler);
-  }, [showFolderPicker]);
+  }, [showSortMenu]);
 
   useEffect(() => {
     if (!folderMenu) return;
@@ -110,18 +100,6 @@ export default function GridView({
     window.addEventListener("click", close);
     return () => window.removeEventListener("click", close);
   }, [folderMenu]);
-
-  // Listen for keyboard events from App
-  useEffect(() => {
-    const onSelectAll = () => selectAll();
-    const onDelete = () => handleDeleteSelected();
-    window.addEventListener("grid-select-all", onSelectAll);
-    window.addEventListener("grid-delete-selected", onDelete);
-    return () => {
-      window.removeEventListener("grid-select-all", onSelectAll);
-      window.removeEventListener("grid-delete-selected", onDelete);
-    };
-  }, [sections, sortMode, selectedIds, alphabeticalDirection, searchQuery]);
 
   // Time-sorted — oldest first
   const timeSortedBookmarks = useMemo(() => {
@@ -187,8 +165,6 @@ export default function GridView({
     });
   }, [filteredSections, sortMode, alphabeticalDirection]);
 
-  const totalSelected = selectedIds.size;
-
   const toggleSection = (id: string) => {
     setCollapsedSections((prev) => {
       const next = new Set(prev);
@@ -198,70 +174,12 @@ export default function GridView({
     });
   };
 
-  const handleCardClick = (e: React.MouseEvent, bm: BookmarkNode) => {
-    // Checkbox toggles selection
-    if ((e.target as HTMLElement).closest(".grid-card-check")) {
-      toggleSelect(bm.id);
-      return;
-    }
-    // Shift+click for range selection
-    if (e.shiftKey && selectedIds.size > 0) {
-      const items = sortMode !== "time"
-        ? displayedFolderSections.flatMap((s) => s.bookmarks)
-        : timeGroups.flatMap((g) => g.bookmarks);
-      const lastSelected = [...selectedIds].pop()!;
-      const lastIdx = items.findIndex((b) => b.id === lastSelected);
-      const curIdx = items.findIndex((b) => b.id === bm.id);
-      if (lastIdx !== -1 && curIdx !== -1) {
-        const [start, end] = lastIdx < curIdx ? [lastIdx, curIdx] : [curIdx, lastIdx];
-        setSelectedIds((prev) => {
-          const next = new Set(prev);
-          for (let i = start; i <= end; i++) next.add(items[i].id);
-          return next;
-        });
-      }
-      return;
-    }
-    // Default: open bookmark
-    if (bm.url) chrome.tabs.create({ url: bm.url });
-  };
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const selectAll = () => {
-    const all = new Set<string>();
-    const items = sortMode !== "time" ? displayedFolderSections : timeGroups;
-    for (const s of items) {
-      for (const b of s.bookmarks) all.add(b.id);
-    }
-    setSelectedIds(all);
-  };
-
-  const clearSelection = () => setSelectedIds(new Set());
-
-  const handleDeleteSelected = () => {
-    if (totalSelected === 0) return;
-    onDeleteSelected([...selectedIds]);
-    clearSelection();
-  };
-
-  const handleMoveSelected = (destFolderId: string) => {
-    for (const id of selectedIds) onMove(id, destFolderId);
-    clearSelection();
-    setShowFolderPicker(false);
+  const handleCardClick = (bm: BookmarkNode) => {
+    if (bm.url) chrome.tabs.update({ url: bm.url });
   };
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
-    const ids = selectedIds.has(id) && selectedIds.size > 1
-      ? [...selectedIds]
-      : [id];
+    const ids = [id];
     dragData.current = ids;
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", JSON.stringify(ids));
@@ -285,21 +203,6 @@ export default function GridView({
       dragData.current = null;
     }
   };
-
-  // All folders flat list for move picker
-  const folderList = useMemo(() => {
-    const folders: { id: string; title: string }[] = [];
-    const walk = (nodes: BookmarkNode[]) => {
-      for (const n of nodes) {
-        if (n.children && n.id !== "0") {
-          folders.push({ id: n.id, title: n.title });
-          walk(n.children);
-        }
-      }
-    };
-    walk(tree);
-    return folders;
-  }, [tree]);
 
   const handleFolderRightClick = (e: React.MouseEvent, node: BookmarkNode) => {
     e.preventDefault();
@@ -341,102 +244,92 @@ export default function GridView({
   }
 
   return (
-    <div
-      className="grid-view"
-      onClick={(e) => {
-        if (e.target !== e.currentTarget) return;
-        clearSelection();
-        onClearSelection();
-      }}
-    >
-      {/* Sort toggle */}
-      <div className="grid-sort-bar">
+    <div className="grid-view">
+      <div className="floating-tool floating-tool-left" ref={sortMenuRef}>
         <button
-          className={`sort-btn ${sortMode === "folder" ? "active" : ""}`}
-          onClick={() => { onSortModeChange("folder"); clearSelection(); }}
+          type="button"
+          className={`floating-tool-button ${showSortMenu ? "active" : ""}`}
+          onClick={() => setShowSortMenu((open) => !open)}
+          aria-label={t("sort_options")}
+          aria-haspopup="menu"
+          aria-expanded={showSortMenu}
+          title={t("sort_options")}
         >
-          {t("sort_custom")}
+          <ArrowUpDown size={17} aria-hidden="true" />
         </button>
-        <button
-          className={`sort-btn ${sortMode === "alphabetical" ? "active" : ""}`}
-          onClick={() => {
-            if (sortMode === "alphabetical") {
-              onAlphabeticalDirectionChange(alphabeticalDirection === "asc" ? "desc" : "asc");
-            } else {
-              onSortModeChange("alphabetical");
-            }
-            clearSelection();
-          }}
-          title={t("sort_alphabetical_hint")}
-        >
-          {alphabeticalDirection === "asc" ? t("sort_name_asc") : t("sort_name_desc")}
-        </button>
-        <button
-          className={`sort-btn ${sortMode === "time" ? "active" : ""}`}
-          onClick={() => { onSortModeChange("time"); clearSelection(); }}
-        >
-          {t("sort_by_time")}
-        </button>
-        <div className="grid-sort-spacer" />
-        <button
-          className={`sort-btn link-check-btn ${isCheckingLinks ? "checking" : ""}`}
-          onClick={onCheckLinks}
-          disabled={isCheckingLinks}
-        >
-          {isCheckingLinks ? "⏳" : "🔗"} {t("check_links")}
-        </button>
-        {brokenCount !== undefined && brokenCount > 0 && !isCheckingLinks && (
-          <>
+        {showSortMenu && (
+          <div className="sort-popover" role="menu">
             <button
-              className="sort-btn link-recheck-btn"
-              onClick={onRecheckBroken}
-            >
-              🔄 {t("recheck_broken")}
-            </button>
-            <button
-              className="sort-btn link-broken-btn"
+              type="button"
+              className={sortMode === "folder" ? "active" : ""}
               onClick={() => {
-                const all = new Set<string>();
-                for (const s of (sortMode !== "time" ? displayedFolderSections : timeGroups)) {
-                  for (const b of s.bookmarks) {
-                    if (getLinkStatus && getLinkStatus(b.id) === "broken") all.add(b.id);
-                  }
-                }
-                setSelectedIds(all);
+                onSortModeChange("folder");
+                setShowSortMenu(false);
               }}
+              role="menuitem"
             >
-              ⚠️ {t("broken_found", { count: brokenCount })}
+              <span className="sort-popover-check">{sortMode === "folder" && <Check size={14} />}</span>
+              {t("sort_custom")}
             </button>
-          </>
-        )}
-        {lastCheckedAt && !isCheckingLinks && (
-          <span className="last-checked-hint">{t("last_checked", { time: formatRelativeTime(lastCheckedAt, t) })}</span>
+            <button
+              type="button"
+              className={sortMode === "alphabetical" && alphabeticalDirection === "asc" ? "active" : ""}
+              onClick={() => {
+                onAlphabeticalDirectionChange("asc");
+                onSortModeChange("alphabetical");
+                setShowSortMenu(false);
+              }}
+              role="menuitem"
+            >
+              <span className="sort-popover-check">{sortMode === "alphabetical" && alphabeticalDirection === "asc" && <Check size={14} />}</span>
+              {t("sort_name_asc")}
+            </button>
+            <button
+              type="button"
+              className={sortMode === "alphabetical" && alphabeticalDirection === "desc" ? "active" : ""}
+              onClick={() => {
+                onAlphabeticalDirectionChange("desc");
+                onSortModeChange("alphabetical");
+                setShowSortMenu(false);
+              }}
+              role="menuitem"
+            >
+              <span className="sort-popover-check">{sortMode === "alphabetical" && alphabeticalDirection === "desc" && <Check size={14} />}</span>
+              {t("sort_name_desc")}
+            </button>
+            <button
+              type="button"
+              className={sortMode === "time" ? "active" : ""}
+              onClick={() => {
+                onSortModeChange("time");
+                setShowSortMenu(false);
+              }}
+              role="menuitem"
+            >
+              <span className="sort-popover-check">{sortMode === "time" && <Check size={14} />}</span>
+              {t("sort_by_time")}
+            </button>
+          </div>
         )}
       </div>
 
-      {/* Batch toolbar */}
-      {totalSelected > 0 && (
-        <div className="grid-batch-bar">
-          <span className="grid-batch-info">{t("selected_items", { count: totalSelected })}</span>
-          <button className="batch-btn" onClick={selectAll}>{t("select_all")}</button>
-          <button className="batch-btn batch-btn-danger" onClick={handleDeleteSelected}>{t("delete_selected")}</button>
-          <div className="batch-move-wrap" ref={pickerRef}>
-            <button className="batch-btn" onClick={() => setShowFolderPicker(!showFolderPicker)}>
-              {t("move_to")}
-            </button>
-            {showFolderPicker && (
-              <div className="batch-folder-picker">
-                {folderList.map((f) => (
-                  <div key={f.id} className="batch-folder-item" onClick={() => handleMoveSelected(f.id)}>
-                    📁 {f.title}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <button className="batch-btn batch-btn-cancel" onClick={clearSelection}>{t("cancel")}</button>
-        </div>
-      )}
+      <div className="floating-tool floating-tool-right">
+        <button
+          type="button"
+          className="floating-tool-button"
+          onClick={onCheckLinks}
+          disabled={isCheckingLinks || !onCheckLinks}
+          aria-label={t("check_links")}
+          title={brokenCount ? t("broken_found", { count: brokenCount }) : t("check_links")}
+        >
+          {isCheckingLinks
+            ? <LoaderCircle className="floating-tool-spinner" size={17} aria-hidden="true" />
+            : <Link2 size={17} aria-hidden="true" />}
+          {!!brokenCount && !isCheckingLinks && (
+            <span className="floating-tool-badge" aria-hidden="true">{brokenCount > 99 ? "99+" : brokenCount}</span>
+          )}
+        </button>
+      </div>
 
       {/* Folder mode — each folder = one column */}
       {sortMode !== "time" &&
@@ -444,7 +337,7 @@ export default function GridView({
           <div
             key={section.folder.id}
             data-folder-id={section.folder.id}
-            className={`grid-section ${dragOverFolder === section.folder.id ? "drag-over" : ""} ${locatedFolderId === section.folder.id ? "located" : ""}`}
+            className={`grid-section ${dragOverFolder === section.folder.id ? "drag-over" : ""}`}
             onDragOver={(e) => { e.preventDefault(); setDragOverFolder(section.folder.id); }}
             onDragLeave={() => setDragOverFolder(null)}
             onDrop={(e) => handleSectionDrop(e, section.folder.id)}
@@ -476,7 +369,7 @@ export default function GridView({
                   </span>
                 )}
               </div>
-              <span className="grid-section-count">{section.bookmarks.length}</span>
+              <span className="grid-section-count">· {section.bookmarks.length}</span>
             </div>
             {!collapsedSections.has(section.folder.id) && (
               <div className="grid-section-body">
@@ -484,7 +377,6 @@ export default function GridView({
                   <BookmarkCard
                     key={bm.id}
                     bm={bm}
-                    isSelected={selectedIds.has(bm.id)}
                     onDragStart={handleDragStart}
                     onClick={handleCardClick}
                     onContextMenu={onContextMenu}
@@ -504,14 +396,13 @@ export default function GridView({
             <div className="grid-section-header">
               <span className="grid-section-icon">🕐</span>
               <h2 className="grid-section-title">{group.label}</h2>
-              <span className="grid-section-count">{group.bookmarks.length}</span>
+              <span className="grid-section-count">· {group.bookmarks.length}</span>
             </div>
             <div className="grid-section-body">
               {group.bookmarks.map((bm) => (
                 <BookmarkCard
                   key={bm.id}
                   bm={bm}
-                  isSelected={selectedIds.has(bm.id)}
                   timeLabel={formatRelativeTime(bm.dateAdded || 0, t)}
                   onDragStart={handleDragStart}
                   onClick={handleCardClick}
@@ -561,7 +452,6 @@ function safeFaviconUrl(url: string | undefined): string {
 
 function BookmarkCard({
   bm,
-  isSelected,
   timeLabel,
   onDragStart,
   onClick,
@@ -570,38 +460,24 @@ function BookmarkCard({
   simplifyTitle,
 }: {
   bm: BookmarkNode;
-  isSelected: boolean;
   timeLabel?: string;
   onDragStart: (e: React.DragEvent, id: string) => void;
-  onClick: (e: React.MouseEvent, bm: BookmarkNode) => void;
+  onClick: (bm: BookmarkNode) => void;
   onContextMenu: (e: React.MouseEvent, node: BookmarkNode) => void;
   linkStatus?: LinkStatus;
   simplifyTitle: boolean;
 }) {
   const { t } = useI18n();
 
-  const handleToggleSelect = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onClick(e, bm);
-  };
-
   return (
     <div
-      className={`grid-card ${isSelected ? "selected" : ""} ${status !== "unknown" ? `link-${status}` : ""}`}
+      className={`grid-card ${status !== "unknown" ? `link-${status}` : ""}`}
       draggable
       onDragStart={(e) => onDragStart(e, bm.id)}
-      onClick={(e) => onClick(e, bm)}
+      onClick={() => onClick(bm)}
       onContextMenu={(e) => onContextMenu(e, bm)}
       title={`${bm.title}\n${bm.url}${timeLabel ? `\n${t("bookmarked", { time: timeLabel })}` : ""}`}
     >
-      <button
-        type="button"
-        className="grid-card-check"
-        onClick={handleToggleSelect}
-        title={isSelected ? t("cancel") : t("select_all")}
-      >
-        {isSelected ? "◉" : "○"}
-      </button>
       <img
         className="grid-card-favicon"
         src={safeFaviconUrl(bm.url)}

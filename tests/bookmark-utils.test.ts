@@ -2,8 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   flattenTree,
   collectFolderIds,
-  findEmptyFolders,
-  findDuplicateBookmarks,
 } from "../src/lib/bookmark-utils";
 import type { BookmarkNode } from "../src/lib/types";
 
@@ -49,7 +47,6 @@ describe("flattenTree", () => {
     expect(result).toHaveLength(3);
   });
 });
-
 describe("collectFolderIds", () => {
   it("returns empty for empty input", () => {
     expect(collectFolderIds([])).toEqual([]);
@@ -74,100 +71,5 @@ describe("collectFolderIds", () => {
       },
     ];
     expect(collectFolderIds(nodes)).toEqual(["1", "2", "3"]);
-  });
-});
-
-describe("findEmptyFolders", () => {
-  it("returns empty when no empty folders", () => {
-    const nodes: BookmarkNode[] = [
-      { id: "1", title: "f", children: [{ id: "2", title: "bm", url: "https://x.com" }] },
-    ];
-    expect(findEmptyFolders(nodes)).toEqual([]);
-  });
-
-  it("finds empty folders at root level", () => {
-    const nodes: BookmarkNode[] = [
-      { id: "1", title: "empty", children: [] },
-      { id: "2", title: "full", children: [{ id: "3", title: "bm", url: "https://x.com" }] },
-    ];
-    expect(findEmptyFolders(nodes)).toEqual([{ id: "1", title: "empty", parentId: undefined }]);
-  });
-
-  it("finds nested empty folders", () => {
-    const nodes: BookmarkNode[] = [
-      {
-        id: "1",
-        title: "parent",
-        children: [
-          { id: "2", title: "empty-child", children: [] },
-          { id: "3", title: "non-empty", children: [{ id: "4", title: "bm", url: "https://x.com" }] },
-        ],
-      },
-    ];
-    expect(findEmptyFolders(nodes)).toEqual([
-      { id: "2", title: "empty-child", parentId: undefined },
-    ]);
-  });
-
-  it("returns empty for input with no folders", () => {
-    const nodes: BookmarkNode[] = [
-      { id: "1", title: "a", url: "https://a.com" },
-      { id: "2", title: "b", url: "https://b.com" },
-    ];
-    expect(findEmptyFolders(nodes)).toEqual([]);
-  });
-});
-
-describe("findDuplicateBookmarks", () => {
-  it("returns empty when no duplicates", () => {
-    const nodes: BookmarkNode[] = [
-      { id: "1", title: "a", url: "https://a.com" },
-      { id: "2", title: "b", url: "https://b.com" },
-    ];
-    expect(findDuplicateBookmarks(nodes)).toEqual([]);
-  });
-
-  it("finds duplicate URLs, keeping the first occurrence", () => {
-    const nodes: BookmarkNode[] = [
-      { id: "1", title: "first", url: "https://example.com" },
-      { id: "2", title: "second", url: "https://example.com" },
-      { id: "3", title: "third", url: "https://other.com" },
-    ];
-    const result = findDuplicateBookmarks(nodes);
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ id: "2", title: "second", url: "https://example.com" });
-  });
-
-  it("finds duplicates within nested folders", () => {
-    const nodes: BookmarkNode[] = [
-      { id: "1", title: "a", url: "https://dup.com" },
-      {
-        id: "2",
-        title: "folder",
-        children: [{ id: "3", title: "b", url: "https://dup.com" }],
-      },
-    ];
-    const result = findDuplicateBookmarks(nodes);
-    expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("3");
-  });
-
-  it("handles items without URLs (folders)", () => {
-    const nodes: BookmarkNode[] = [
-      { id: "1", title: "folder", children: [{ id: "2", title: "bm", url: "https://example.com" }] },
-    ];
-    expect(findDuplicateBookmarks(nodes)).toEqual([]);
-  });
-
-  it("marks multiple duplicates beyond the first", () => {
-    const nodes: BookmarkNode[] = [
-      { id: "1", title: "a", url: "https://same.com" },
-      { id: "2", title: "b", url: "https://same.com" },
-      { id: "3", title: "c", url: "https://same.com" },
-    ];
-    const result = findDuplicateBookmarks(nodes);
-    expect(result).toHaveLength(2);
-    expect(result[0].id).toBe("2");
-    expect(result[1].id).toBe("3");
   });
 });

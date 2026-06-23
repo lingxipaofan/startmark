@@ -14,15 +14,18 @@
     "build:website": "npm run build && VERSION=$(node -p \"require('./package.json').version\") && rm -rf dist-website && mkdir -p dist-website && cp -R website/* dist-website/ && cp website/releases/*.zip dist-website/ && cd .output/chrome-mv3 && zip -r \"../../dist-website/pinmark-chrome.zip\" . -x '*.DS_Store' && cp \"../../dist-website/pinmark-chrome.zip\" \"../../dist-website/pinmark-v${VERSION}.zip\""
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.2",
     "@types/chrome": "^0.1.42",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@wxt-dev/module-react": "^1.2.2",
+    "jsdom": "^29.1.1",
     "typescript": "^5.9.0",
     "vitest": "^4.1.6",
     "wxt": "^0.20.25"
   },
   "dependencies": {
+    "lucide-react": "^1.21.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"
   }
