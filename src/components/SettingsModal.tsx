@@ -8,6 +8,8 @@ interface Props {
   onDarkModeChange: (value: boolean) => void;
   simplifyTitles: boolean;
   onSimplifyTitlesChange: (value: boolean) => void;
+  zoom: number;
+  onZoomChange: (value: number) => void;
   onClose: () => void;
 }
 
@@ -16,6 +18,8 @@ export default function SettingsModal({
   onDarkModeChange,
   simplifyTitles,
   onSimplifyTitlesChange,
+  zoom,
+  onZoomChange,
   onClose,
 }: Props) {
   const { t, locale, setLocale, locales } = useI18n();
@@ -101,6 +105,21 @@ export default function SettingsModal({
 
           <section className="settings-group" aria-labelledby="display-heading">
             <h3 id="display-heading">{t("display")}</h3>
+            <label className="settings-zoom-row">
+              <span className="settings-zoom-copy">
+                <strong>{t("zoom")}</strong>
+                <output>{Math.round(zoom * 100)}%</output>
+              </span>
+              <input
+                type="range"
+                min="0.75"
+                max="1.25"
+                step="0.05"
+                value={zoom}
+                aria-label={t("zoom")}
+                onChange={(event) => onZoomChange(Number(event.target.value))}
+              />
+            </label>
             <label className="settings-row settings-switch-row" title={t("simplify_titles_hint")}>
               <span className="settings-label-copy">
                 <strong>{t("simplify_titles")}</strong>

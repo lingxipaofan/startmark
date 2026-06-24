@@ -6,31 +6,37 @@ import SettingsModal from "./SettingsModal";
 interface Props {
   searchQuery: string;
   onSearchChange: (q: string) => void;
-  bookmarkCount: number;
   darkMode: boolean;
   onDarkModeChange: (v: boolean) => void;
   simplifyTitles: boolean;
   onSimplifyTitlesChange: (value: boolean) => void;
+  zoom?: number;
+  onZoomChange?: (value: number) => void;
   searchRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 export default function Header({
   searchQuery,
   onSearchChange,
-  bookmarkCount,
   darkMode,
   onDarkModeChange,
   simplifyTitles,
   onSimplifyTitlesChange,
+  zoom = 1,
+  onZoomChange = () => undefined,
   searchRef,
 }: Props) {
   const { t } = useI18n();
   const [settingsOpen, setSettingsOpen] = React.useState(false);
 
+  React.useEffect(() => {
+    const openSettings = () => setSettingsOpen(true);
+    window.addEventListener("pinmark-open-settings", openSettings);
+    return () => window.removeEventListener("pinmark-open-settings", openSettings);
+  }, []);
+
   return (
     <header className="header">
-      <h1 className="header-title">Pinmark</h1>
-      <span className="header-count">{t("total_bookmarks", { count: bookmarkCount })}</span>
       <div className="header-search">
         <input
           ref={searchRef}
@@ -57,6 +63,8 @@ export default function Header({
           onDarkModeChange={onDarkModeChange}
           simplifyTitles={simplifyTitles}
           onSimplifyTitlesChange={onSimplifyTitlesChange}
+          zoom={zoom}
+          onZoomChange={onZoomChange}
           onClose={() => setSettingsOpen(false)}
         />
       )}

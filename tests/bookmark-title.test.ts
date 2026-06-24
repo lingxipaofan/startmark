@@ -16,4 +16,9 @@ describe("simplifyBookmarkTitle", () => {
   it("does not alter a plain title", () => {
     expect(simplifyBookmarkTitle("OpenAI Documentation")).toBe("OpenAI Documentation");
   });
+
+  it("removes compact underscore and hyphen suffixes", () => {
+    expect(simplifyBookmarkTitle("ChatGPT充值_GPT_xxxx")).toBe("ChatGPT充值");
+    expect(simplifyBookmarkTitle("酷我音乐-xxx")).toBe("酷我音乐");
+  });
 });

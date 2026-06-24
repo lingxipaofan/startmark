@@ -3,6 +3,7 @@ export interface BookmarkNode {
   title: string;
   url?: string;
   parentId?: string;
+  index?: number;
   dateAdded?: number;
   children?: BookmarkNode[];
 }
@@ -12,7 +13,8 @@ export type LinkStatus = "unknown" | "valid" | "broken" | "checking";
 export interface ContextMenuState {
   x: number;
   y: number;
-  node: BookmarkNode;
+  kind: "bookmark" | "folder" | "background";
+  node?: BookmarkNode;
 }
 
 export interface SavedTreeNode {

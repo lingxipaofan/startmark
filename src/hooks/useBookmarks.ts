@@ -29,8 +29,6 @@ export function useBookmarks() {
     [tree]
   );
 
-  const bookmarkCount = allBookmarks.length;
-
   const filteredBookmarks = useMemo(
     () => searchQuery
       ? allBookmarks.filter(
@@ -43,16 +41,16 @@ export function useBookmarks() {
   );
 
   const moveBookmark = useCallback(
-    async (id: string, destinationParentId: string) => {
-      await moveBookmarkNode(id, destinationParentId);
+    async (id: string, destinationParentId: string, index?: number) => {
+      await moveBookmarkNode(id, destinationParentId, index);
       await refresh();
     },
     [refresh]
   );
 
   const createFolder = useCallback(
-    async (parentId: string) => {
-      const name = prompt(t("folder_name_prompt"));
+    async (parentId: string, providedName?: string) => {
+      const name = providedName || prompt(t("folder_name_prompt"));
       if (!name) return;
       await createBookmarkFolder(parentId, name);
       await refresh();
@@ -67,7 +65,6 @@ export function useBookmarks() {
     searchQuery,
     setSearchQuery,
     filteredBookmarks,
-    bookmarkCount,
     refresh,
   };
 }

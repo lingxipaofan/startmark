@@ -13,6 +13,10 @@ describe("sortBookmarkNodes", () => {
     expect(sortBookmarkNodes(nodes, "folder", "asc")).toBe(nodes);
   });
 
+  it("leaves custom ordering to the persisted custom-order map", () => {
+    expect(sortBookmarkNodes(nodes, "custom", "asc")).toBe(nodes);
+  });
+
   it("sorts names naturally in both directions", () => {
     expect(sortBookmarkNodes(nodes, "alphabetical", "asc").map((node) => node.id))
       .toEqual(["2", "3", "1"]);

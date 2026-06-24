@@ -31,8 +31,8 @@ export async function loadBookmarkTree(): Promise<BookmarkNode[]> {
   return root.children || [];
 }
 
-export async function moveBookmarkNode(id: string, parentId: string) {
-  await chrome.bookmarks.move(id, { parentId });
+export async function moveBookmarkNode(id: string, parentId: string, index?: number) {
+  await chrome.bookmarks.move(id, { parentId, index });
 }
 
 export async function createBookmarkFolder(

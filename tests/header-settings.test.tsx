@@ -10,7 +10,6 @@ function renderHeader(overrides = {}) {
   const props = {
     searchQuery: "",
     onSearchChange: vi.fn(),
-    bookmarkCount: 12,
     darkMode: false,
     onDarkModeChange: vi.fn(),
     simplifyTitles: false,
@@ -55,6 +54,15 @@ describe("Header settings", () => {
 
     fireEvent.click(screen.getByRole("switch", { name: "Short titles" }));
     expect(props.onSimplifyTitlesChange).toHaveBeenCalledWith(true);
+
+    const zoomChange = vi.fn();
+    cleanup();
+    renderHeader({ zoom: 1, onZoomChange: zoomChange });
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.change(screen.getByRole("slider", { name: "Interface scale" }), {
+      target: { value: "1.15" },
+    });
+    expect(zoomChange).toHaveBeenCalledWith(1.15);
 
     const languageSelect = screen.getByRole("combobox", { name: "Language" });
     languageSelect.focus();

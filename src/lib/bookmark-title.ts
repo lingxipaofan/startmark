@@ -5,6 +5,12 @@ export function simplifyBookmarkTitle(title: string): string {
   const cleaned = title.replace(LEADING_COUNT_PATTERN, "").trim();
   if (!cleaned) return title.trim();
 
+  // Common bookmark suffixes often use underscores or a compact hyphen
+  // without surrounding spaces (for example "ChatGPT充值_GPT_xxx" and
+  // "酷我音乐-歌曲名"). Keep the stable service/site name before them.
+  const compactSuffix = cleaned.match(/^(.+?\S)(?:_GPT(?:_.*)?|[_-]\S[^_-]*)$/i);
+  if (compactSuffix?.[1]) return compactSuffix[1].trim();
+
   const parts = cleaned
     .split(/\s*(?:\||｜)\s*|\s+[-–—·•]\s+/)
     .map((part) => part.trim())

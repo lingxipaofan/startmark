@@ -1,6 +1,6 @@
 import type { BookmarkNode } from "./types";
 
-export type SortMode = "folder" | "alphabetical" | "time";
+export type SortMode = "folder" | "custom" | "alphabetical" | "time";
 export type AlphabeticalDirection = "asc" | "desc";
 
 export const SORT_MODE_KEY = "pinmark-grid-sort-mode";
@@ -8,7 +8,7 @@ export const ALPHABETICAL_DIRECTION_KEY = "pinmark-alphabetical-direction";
 
 export function readSortMode(): SortMode {
   const stored = localStorage.getItem(SORT_MODE_KEY);
-  return stored === "alphabetical" || stored === "time" ? stored : "folder";
+  return stored === "custom" || stored === "alphabetical" || stored === "time" ? stored : "folder";
 }
 
 export function readAlphabeticalDirection(): AlphabeticalDirection {
@@ -20,7 +20,7 @@ export function sortBookmarkNodes(
   mode: SortMode,
   direction: AlphabeticalDirection
 ): BookmarkNode[] {
-  if (mode === "folder") return nodes;
+  if (mode === "folder" || mode === "custom") return nodes;
 
   const result = [...nodes];
   if (mode === "time") {

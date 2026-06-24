@@ -6,6 +6,7 @@ import GridView from "../../src/components/GridView";
 import ContextMenu from "../../src/components/ContextMenu";
 import Toast from "../../src/components/Toast";
 import ConfirmDialog from "../../src/components/ConfirmDialog";
+import EditDialog from "../../src/components/EditDialog";
 import { logger } from "../../src/lib/logger";
 import { useI18n } from "../../src/lib/i18n";
 import type { BookmarkNode, ContextMenuState, SavedTreeNode } from "../../src/lib/types";
@@ -20,6 +21,12 @@ import {
 
 const EXT_VERSION = chrome.runtime.getManifest().version;
 const SIMPLIFY_TITLES_KEY = "pinmark-simplify-titles";
+const ZOOM_KEY = "pinmark-zoom";
+
+type EditorState =
+  | { kind: "rename"; id: string; initialValue: string }
+  | { kind: "url"; id: string; initialValue: string }
+  | { kind: "folder"; parentId: string; initialValue: string };
 
 export default function App() {
   const { t } = useI18n();
@@ -31,7 +38,6 @@ export default function App() {
     searchQuery,
     setSearchQuery,
     filteredBookmarks,
-    bookmarkCount,
   } = useBookmarks();
 
   // Log startup
@@ -48,6 +54,11 @@ export default function App() {
   const [simplifyTitles, setSimplifyTitles] = useState(
     () => localStorage.getItem(SIMPLIFY_TITLES_KEY) === "true"
   );
+  const [zoom, setZoom] = useState(() => {
+    const stored = Number(localStorage.getItem(ZOOM_KEY));
+    return stored >= 0.75 && stored <= 1.25 ? stored : 1;
+  });
+  const [editor, setEditor] = useState<EditorState | null>(null);
   const [toast, setToast] = useState<{
     message: string;
     onUndo?: () => void | Promise<void>;
@@ -77,6 +88,11 @@ export default function App() {
   React.useEffect(() => {
     localStorage.setItem(SIMPLIFY_TITLES_KEY, String(simplifyTitles));
   }, [simplifyTitles]);
+
+  React.useEffect(() => {
+    document.documentElement.style.setProperty("--ui-scale", String(zoom));
+    localStorage.setItem(ZOOM_KEY, String(zoom));
+  }, [zoom]);
 
   // Toast auto-dismiss
   React.useEffect(() => {
@@ -143,9 +159,7 @@ export default function App() {
   }, [saveFolderTree, restoreBookmarkTree, refresh, showToast, t]);
 
   // Rename a bookmark or folder
-  const handleRenameNode = useCallback(async (id: string, currentTitle: string) => {
-    const name = prompt(t("rename_prompt"), currentTitle);
-    if (!name || name === currentTitle) return;
+  const handleRenameNode = useCallback(async (id: string, name: string) => {
     try {
       await chrome.bookmarks.update(id, { title: name });
       await refresh();
@@ -155,9 +169,7 @@ export default function App() {
   }, [refresh]);
 
   // Edit a bookmark's URL
-  const handleEditUrl = useCallback(async (id: string, currentUrl: string) => {
-    const url = prompt(t("url_prompt"), currentUrl);
-    if (!url || url === currentUrl) return;
+  const handleEditUrl = useCallback(async (id: string, url: string) => {
     try {
       await chrome.bookmarks.update(id, { url });
       await refresh();
@@ -232,31 +244,67 @@ export default function App() {
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
+      kind: node.url ? "bookmark" : "folder",
       node,
     });
   };
 
+  const handleBackgroundContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, kind: "background" });
+  };
+
   const handleContextMenuAction = async (action: string) => {
     if (!contextMenu) return;
-    const node = contextMenu.node!;
+    const node = contextMenu.node;
 
+    if (action === "open-new-tab") {
+      if (node?.url) await chrome.tabs.create({ url: node.url, active: true });
+      setContextMenu(null);
+      return;
+    }
     if (action === "open-new-window") {
-      if (node.url) await chrome.windows.create({ url: node.url });
+      if (node?.url) await chrome.windows.create({ url: node.url });
       setContextMenu(null);
       return;
     }
     if (action === "rename-bookmark") {
-      handleRenameNode(node.id, node.title);
+      if (node) setEditor({ kind: "rename", id: node.id, initialValue: node.title });
       setContextMenu(null);
       return;
     }
     if (action === "edit-url") {
-      handleEditUrl(node.id, node.url || "");
+      if (node) setEditor({ kind: "url", id: node.id, initialValue: node.url || "" });
       setContextMenu(null);
       return;
     }
     if (action === "delete-bookmark") {
-      setDeleteCandidate(node);
+      if (node) setDeleteCandidate(node);
+      setContextMenu(null);
+      return;
+    }
+    if (action === "new-folder") {
+      setEditor({
+        kind: "folder",
+        parentId: contextMenu.kind === "folder" && node ? node.id : "1",
+        initialValue: "",
+      });
+      setContextMenu(null);
+      return;
+    }
+    if (action === "rename-folder") {
+      if (node) setEditor({ kind: "rename", id: node.id, initialValue: node.title });
+      setContextMenu(null);
+      return;
+    }
+    if (action === "delete-folder") {
+      if (node) await handleDeleteFolderWithUndo(node.id, node.title);
+      setContextMenu(null);
+      return;
+    }
+    if (action === "settings") {
+      window.dispatchEvent(new Event("pinmark-open-settings"));
       setContextMenu(null);
       return;
     }
@@ -270,15 +318,23 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app">
+    <div
+      className="app"
+      style={{
+        zoom,
+        width: `${100 / zoom}%`,
+        height: `${100 / zoom}%`,
+      }}
+    >
       <Header
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        bookmarkCount={bookmarkCount}
         darkMode={darkMode}
         onDarkModeChange={setDarkMode}
         simplifyTitles={simplifyTitles}
         onSimplifyTitlesChange={setSimplifyTitles}
+        zoom={zoom}
+        onZoomChange={setZoom}
         searchRef={searchRef}
       />
 
@@ -288,10 +344,8 @@ export default function App() {
             tree={tree}
             searchQuery={searchQuery}
             onMove={moveBookmark}
-            onDeleteFolder={handleDeleteFolderWithUndo}
-            onCreateSubFolder={createFolder}
             onContextMenu={handleBookmarkContextMenu}
-            onRename={handleRenameNode}
+            onBackgroundContextMenu={handleBackgroundContextMenu}
             onCheckLinks={handleCheckLinks}
             isCheckingLinks={isCheckingLinks}
             brokenCount={visibleBrokenCount}
@@ -309,7 +363,29 @@ export default function App() {
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
+          kind={contextMenu.kind}
+          isRootFolder={contextMenu.node?.parentId === "0" || contextMenu.node?.id === "0"}
           onAction={handleContextMenuAction}
+        />
+      )}
+
+      {editor && (
+        <EditDialog
+          title={t(editor.kind === "folder" ? "new_folder" : editor.kind === "url" ? "edit_url" : "rename")}
+          label={t(editor.kind === "url" ? "url" : editor.kind === "folder" ? "folder_name" : "name")}
+          inputType={editor.kind === "url" ? "url" : "text"}
+          initialValue={editor.initialValue}
+          onCancel={() => setEditor(null)}
+          onSave={async (value) => {
+            if (editor.kind === "folder") {
+              await createFolder(editor.parentId, value);
+            } else if (editor.kind === "url") {
+              await handleEditUrl(editor.id, value);
+            } else {
+              await handleRenameNode(editor.id, value);
+            }
+            setEditor(null);
+          }}
         />
       )}
 
@@ -326,7 +402,6 @@ export default function App() {
 
       {toast && <Toast message={toast.message} onUndo={toast.onUndo} onClose={() => setToast(null)} />}
 
-      <span className="version-badge" title={`Pinmark v${EXT_VERSION}`}>v{EXT_VERSION}</span>
     </div>
   );
 }
