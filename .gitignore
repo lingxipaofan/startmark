@@ -5,3 +5,4 @@ node_modules/
 dist-website/
 *.local.*
 .DS_Store
+key.pem

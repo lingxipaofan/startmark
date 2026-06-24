@@ -9,12 +9,8 @@ const nodes: BookmarkNode[] = [
 ];
 
 describe("sortBookmarkNodes", () => {
-  it("preserves Chrome order in folder mode", () => {
+  it("preserves Chrome order in folder/default mode", () => {
     expect(sortBookmarkNodes(nodes, "folder", "asc")).toBe(nodes);
-  });
-
-  it("leaves custom ordering to the persisted custom-order map", () => {
-    expect(sortBookmarkNodes(nodes, "custom", "asc")).toBe(nodes);
   });
 
   it("sorts names naturally in both directions", () => {

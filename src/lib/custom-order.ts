@@ -1,28 +1,11 @@
 import type { DropPosition } from "./bookmark-move";
 
-export const CUSTOM_ORDER_KEY = "pinmark-custom-order";
+// Utility functions for drag-and-drop preview ordering.
+// No persistent custom sort state — Chrome's native bookmark order is the source of truth.
 
-export interface CustomOrderState {
+export interface DragOrderState {
   folderIds: string[];
   bookmarkIdsByFolder: Record<string, string[]>;
-}
-
-export function readCustomOrder(): CustomOrderState {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(CUSTOM_ORDER_KEY) || "null") as Partial<CustomOrderState> | null;
-    return {
-      folderIds: Array.isArray(parsed?.folderIds) ? parsed.folderIds : [],
-      bookmarkIdsByFolder: parsed?.bookmarkIdsByFolder && typeof parsed.bookmarkIdsByFolder === "object"
-        ? parsed.bookmarkIdsByFolder
-        : {},
-    };
-  } catch {
-    return { folderIds: [], bookmarkIdsByFolder: {} };
-  }
-}
-
-export function writeCustomOrder(order: CustomOrderState): void {
-  localStorage.setItem(CUSTOM_ORDER_KEY, JSON.stringify(order));
 }
 
 export function orderByIds<T>(items: T[], ids: string[], getId: (item: T) => string): T[] {

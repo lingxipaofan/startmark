@@ -16,9 +16,7 @@ import {
   moveIdRelative,
   moveIdToEnd,
   orderByIds,
-  readCustomOrder,
-  writeCustomOrder,
-  type CustomOrderState,
+  type DragOrderState,
 } from "../lib/custom-order";
 
 interface Props {
@@ -97,8 +95,7 @@ export default function GridView({
 }: Props) {
   const { t } = useI18n();
   const [sections, setSections] = useState<FolderSection[]>([]);
-  const [customOrder, setCustomOrder] = useState<CustomOrderState>(readCustomOrder);
-  const [dragPreviewOrder, setDragPreviewOrder] = useState<CustomOrderState | null>(null);
+  const [dragPreviewOrder, setDragPreviewOrder] = useState<DragOrderState | null>(null);
   const [crossFolderPreview, setCrossFolderPreview] = useState<{
     bookmark: BookmarkNode;
     targetFolderId: string;
@@ -112,7 +109,7 @@ export default function GridView({
   const dragData = useRef<DragItem | null>(null);
   const dragOriginRect = useRef<DOMRect | null>(null);
   const dragLayoutSnapshot = useRef<DragLayoutSnapshot | null>(null);
-  const dragBaseOrder = useRef<CustomOrderState | null>(null);
+  const dragBaseOrder = useRef<DragOrderState | null>(null);
   const committedDragPreview = useRef<{ key: string; x: number; y: number } | null>(null);
   const committedDropTarget = useRef<DropTarget | null>(null);
   const layoutRectsBeforePreview = useRef<Map<string, DOMRect> | null>(null);
@@ -203,8 +200,8 @@ export default function GridView({
   }, [timeSortedBookmarks, t]);
 
   const orderedFolderSections = useMemo(() => {
-    const activeCustomOrder = dragPreviewOrder || customOrder;
-    const useCustomOrder = dragPreviewOrder !== null || sortMode === "custom";
+    const activeCustomOrder = dragPreviewOrder;
+    const useCustomOrder = dragPreviewOrder !== null;
     const rootSections = sections.filter((section) => section.folder.parentId === "0");
     const regularSections = sections.filter((section) => section.folder.parentId !== "0");
     const orderedRegularSections = useCustomOrder
@@ -239,7 +236,6 @@ export default function GridView({
     sections,
     sortMode,
     alphabeticalDirection,
-    customOrder,
     dragPreviewOrder,
     crossFolderPreview,
   ]);
@@ -284,7 +280,7 @@ export default function GridView({
     type: DragItem["type"]
   ) => {
     dragData.current = { node, type };
-    dragBaseOrder.current = createCustomOrderSnapshot();
+    dragBaseOrder.current = createDragOrderSnapshot();
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", JSON.stringify({ id: node.id, type }));
     const source = e.currentTarget as HTMLElement;
@@ -358,7 +354,7 @@ export default function GridView({
     setCrossFolderPreview(null);
   };
 
-  const cloneCustomOrder = (order: CustomOrderState): CustomOrderState => ({
+  const cloneDragOrder = (order: DragOrderState): DragOrderState => ({
     folderIds: [...order.folderIds],
     bookmarkIdsByFolder: Object.fromEntries(
       Object.entries(order.bookmarkIdsByFolder).map(([folderId, ids]) => [folderId, [...ids]])
@@ -489,7 +485,7 @@ export default function GridView({
     };
   }, [collapsedSections]);
 
-  const createCustomOrderSnapshot = (): CustomOrderState => {
+  const createDragOrderSnapshot = (): DragOrderState => {
     const sourceSections = sortMode === "time"
       ? sections.map((section) => ({
           ...section,
@@ -508,13 +504,6 @@ export default function GridView({
     };
   };
 
-  const removeBookmarkFromCustomOrder = (order: CustomOrderState, bookmarkId: string) => {
-    for (const folderId of Object.keys(order.bookmarkIdsByFolder)) {
-      order.bookmarkIdsByFolder[folderId] = order.bookmarkIdsByFolder[folderId]
-        .filter((id) => id !== bookmarkId);
-    }
-  };
-
   const previewRelativeMove = (
     item: DragItem,
     target: BookmarkNode,
@@ -528,7 +517,7 @@ export default function GridView({
     }
 
     setDragPreviewOrder(() => {
-      const next = cloneCustomOrder(dragBaseOrder.current || createCustomOrderSnapshot());
+      const next = cloneDragOrder(dragBaseOrder.current || createDragOrderSnapshot());
       if (type === "bookmark") {
         const folderId = target.parentId!;
         if (item.node.parentId !== folderId) {
@@ -552,7 +541,7 @@ export default function GridView({
 
   const previewInsideMove = (item: DragItem, folder: BookmarkNode) => {
     if (sortMode === "time") return;
-    const next = cloneCustomOrder(dragBaseOrder.current || createCustomOrderSnapshot());
+    const next = cloneDragOrder(dragBaseOrder.current || createDragOrderSnapshot());
     if (item.type === "bookmark") {
       if (item.node.parentId !== folder.id) {
         setCrossFolderPreview({ bookmark: item.node, targetFolderId: folder.id });
@@ -663,20 +652,6 @@ export default function GridView({
     });
   };
 
-  const moveInCustomOrder = async (
-    id: string,
-    parentId: string,
-    index: number | undefined,
-    nextCustomOrder: CustomOrderState
-  ) => {
-    // Persist the visual snapshot before refreshing so the previous automatic
-    // sort cannot reshuffle unrelated items while Chrome applies the move.
-    writeCustomOrder(nextCustomOrder);
-    setCustomOrder(nextCustomOrder);
-    onSortModeChange("custom");
-    await onMove(id, parentId, index);
-  };
-
   const handleRelativeDrop = async (
     e: React.DragEvent<HTMLElement>,
     target: BookmarkNode,
@@ -703,33 +678,8 @@ export default function GridView({
       : pointerPosition;
     const destination = getRelativeMoveDestination(item.node, finalTarget, position);
     if (!destination) return clearDragState();
-    const nextCustomOrder = dragPreviewOrder
-      ? cloneCustomOrder(dragPreviewOrder)
-      : createCustomOrderSnapshot();
-    if (type === "bookmark") {
-      removeBookmarkFromCustomOrder(nextCustomOrder, item.node.id);
-      const targetFolderId = finalTarget.parentId!;
-      nextCustomOrder.bookmarkIdsByFolder[targetFolderId] = moveIdRelative(
-        nextCustomOrder.bookmarkIdsByFolder[targetFolderId] || [],
-        item.node.id,
-        finalTarget.id,
-        position
-      );
-    } else {
-      nextCustomOrder.folderIds = moveIdRelative(
-        nextCustomOrder.folderIds,
-        item.node.id,
-        finalTarget.id,
-        position
-      );
-    }
     try {
-      await moveInCustomOrder(
-        item.node.id,
-        destination.parentId,
-        destination.index,
-        nextCustomOrder
-      );
+      await onMove(item.node.id, destination.parentId, destination.index);
     } finally {
       clearDragState();
     }
@@ -754,33 +704,8 @@ export default function GridView({
           acceptedDropTarget.position
         );
         if (!destination) return clearDragState();
-        const nextCustomOrder = dragPreviewOrder
-          ? cloneCustomOrder(dragPreviewOrder)
-          : createCustomOrderSnapshot();
-        if (item.type === "bookmark") {
-          removeBookmarkFromCustomOrder(nextCustomOrder, item.node.id);
-          const targetFolderId = acceptedNode.parentId!;
-          nextCustomOrder.bookmarkIdsByFolder[targetFolderId] = moveIdRelative(
-            nextCustomOrder.bookmarkIdsByFolder[targetFolderId] || [],
-            item.node.id,
-            acceptedNode.id,
-            acceptedDropTarget.position
-          );
-        } else {
-          nextCustomOrder.folderIds = moveIdRelative(
-            nextCustomOrder.folderIds,
-            item.node.id,
-            acceptedNode.id,
-            acceptedDropTarget.position
-          );
-        }
         try {
-          await moveInCustomOrder(
-            item.node.id,
-            destination.parentId,
-            destination.index,
-            nextCustomOrder
-          );
+          await onMove(item.node.id, destination.parentId, destination.index);
         } finally {
           clearDragState();
         }
@@ -796,25 +721,8 @@ export default function GridView({
       ? findNode(tree, acceptedDropTarget.id)
       : null;
     const finalFolder = acceptedFolder?.children ? acceptedFolder : folder;
-    const nextCustomOrder = dragPreviewOrder
-      ? cloneCustomOrder(dragPreviewOrder)
-      : createCustomOrderSnapshot();
-    if (item.type === "bookmark") {
-      removeBookmarkFromCustomOrder(nextCustomOrder, item.node.id);
-      nextCustomOrder.bookmarkIdsByFolder[finalFolder.id] = moveIdToEnd(
-        nextCustomOrder.bookmarkIdsByFolder[finalFolder.id] || [],
-        item.node.id
-      );
-    } else {
-      nextCustomOrder.folderIds = moveIdRelative(
-        nextCustomOrder.folderIds,
-        item.node.id,
-        finalFolder.id,
-        "after"
-      );
-    }
     try {
-      await moveInCustomOrder(item.node.id, finalFolder.id, undefined, nextCustomOrder);
+      await onMove(item.node.id, finalFolder.id, undefined);
     } finally {
       clearDragState();
     }
@@ -923,18 +831,6 @@ export default function GridView({
             >
               <span className="sort-popover-check">{sortMode === "folder" && <Check size={14} />}</span>
               {t("sort_chrome")}
-            </button>
-            <button
-              type="button"
-              className={sortMode === "custom" ? "active" : ""}
-              onClick={() => {
-                onSortModeChange("custom");
-                setShowSortMenu(false);
-              }}
-              role="menuitem"
-            >
-              <span className="sort-popover-check">{sortMode === "custom" && <Check size={14} />}</span>
-              {t("sort_custom")}
             </button>
             <button
               type="button"
