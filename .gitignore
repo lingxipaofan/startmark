@@ -1,8 +1,43 @@
+# Dependencies
 node_modules/
+
+# Build output
 .output/
-.wxt/
-.superpowers/
+dist/
 dist-website/
-*.local.*
+
+# WXT cache
+.wxt/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
-key.pem
+Thumbs.db
+
+# Env / secrets
+.env
+.env.*
+*.local.*
+
+# Certificates
+*.pem
+*.key
+
+# Logs
+*.log
+NVIDIA Corporation/
+
+# TypeScript
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+
+# Superpowers (local AI dev tool)
+.superpowers/
