@@ -22,11 +22,33 @@ import {
 const EXT_VERSION = chrome.runtime.getManifest().version;
 const SIMPLIFY_TITLES_KEY = "pinmark-simplify-titles";
 const ZOOM_KEY = "pinmark-zoom";
+const SHOW_ROOT_FOLDERS_KEY = "pinmark-show-root-folders";
 
 type EditorState =
   | { kind: "rename"; id: string; initialValue: string }
   | { kind: "url"; id: string; initialValue: string }
   | { kind: "folder"; parentId: string; initialValue: string };
+
+type DeleteCandidate =
+  | { kind: "bookmark"; node: BookmarkNode }
+  | { kind: "folder"; node: BookmarkNode };
+
+function collectBookmarkUrls(node: BookmarkNode): string[] {
+  if (node.url) return [node.url];
+  return node.children?.flatMap((child) => collectBookmarkUrls(child)) || [];
+}
+
+function groupTabs(tabIds: [number, ...number[]], title: string): Promise<void> {
+  return new Promise((resolve) => {
+    chrome.tabs.group({ tabIds }, (groupId) => {
+      if (chrome.runtime.lastError || typeof groupId !== "number") {
+        resolve();
+        return;
+      }
+      chrome.tabGroups.update(groupId, { title }, () => resolve());
+    });
+  });
+}
 
 export default function App() {
   const { t } = useI18n();
@@ -42,17 +64,20 @@ export default function App() {
 
   // Log startup
   React.useEffect(() => {
-    logger.info(`Pinmark v${EXT_VERSION} initialized`);
+    logger.info(`Startmark v${EXT_VERSION} initialized`);
   }, []);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [deleteCandidate, setDeleteCandidate] = useState<BookmarkNode | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<DeleteCandidate | null>(null);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("pinmark-dark") === "true");
   const [sortMode, setSortMode] = useState<SortMode>(readSortMode);
   const [alphabeticalDirection, setAlphabeticalDirection] =
     useState<AlphabeticalDirection>(readAlphabeticalDirection);
   const [simplifyTitles, setSimplifyTitles] = useState(
     () => localStorage.getItem(SIMPLIFY_TITLES_KEY) === "true"
+  );
+  const [showRootFolders, setShowRootFolders] = useState(
+    () => localStorage.getItem(SHOW_ROOT_FOLDERS_KEY) !== "false"
   );
   const [zoom, setZoom] = useState(() => {
     const stored = Number(localStorage.getItem(ZOOM_KEY));
@@ -67,6 +92,7 @@ export default function App() {
   const {
     isChecking: isCheckingLinks,
     checkLinks,
+    resetLinkStatus,
     pruneLinkStatus,
     getStatus,
   } = useLinkCheck();
@@ -90,7 +116,10 @@ export default function App() {
   }, [simplifyTitles]);
 
   React.useEffect(() => {
-    document.documentElement.style.setProperty("--ui-scale", String(zoom));
+    localStorage.setItem(SHOW_ROOT_FOLDERS_KEY, String(showRootFolders));
+  }, [showRootFolders]);
+
+  React.useEffect(() => {
     localStorage.setItem(ZOOM_KEY, String(zoom));
   }, [zoom]);
 
@@ -269,6 +298,27 @@ export default function App() {
       setContextMenu(null);
       return;
     }
+    if (action === "open-incognito-window") {
+      if (node?.url) await chrome.windows.create({ url: node.url, incognito: true });
+      setContextMenu(null);
+      return;
+    }
+    if (action === "open-folder-tab-group") {
+      if (node?.children) {
+        const urls = collectBookmarkUrls(node);
+        const createdTabs = await Promise.all(
+          urls.map((url) => chrome.tabs.create({ url, active: false }))
+        );
+        const tabIds = createdTabs
+          .map((tab) => tab.id)
+          .filter((id): id is number => typeof id === "number");
+        if (tabIds.length > 0) {
+          await groupTabs(tabIds as [number, ...number[]], node.title || t("untitled"));
+        }
+      }
+      setContextMenu(null);
+      return;
+    }
     if (action === "rename-bookmark") {
       if (node) setEditor({ kind: "rename", id: node.id, initialValue: node.title });
       setContextMenu(null);
@@ -280,7 +330,45 @@ export default function App() {
       return;
     }
     if (action === "delete-bookmark") {
-      if (node) setDeleteCandidate(node);
+      if (node) setDeleteCandidate({ kind: "bookmark", node });
+      setContextMenu(null);
+      return;
+    }
+    if (action === "refresh") {
+      await refresh();
+      setContextMenu(null);
+      return;
+    }
+    if (action === "sort-folder") {
+      setSortMode("folder");
+      setContextMenu(null);
+      return;
+    }
+    if (action === "sort-name-asc") {
+      setAlphabeticalDirection("asc");
+      setSortMode("alphabetical");
+      setContextMenu(null);
+      return;
+    }
+    if (action === "sort-name-desc") {
+      setAlphabeticalDirection("desc");
+      setSortMode("alphabetical");
+      setContextMenu(null);
+      return;
+    }
+    if (action === "sort-time") {
+      setSortMode("time");
+      setContextMenu(null);
+      return;
+    }
+    if (action === "check-links") {
+      setContextMenu(null);
+      if (!isCheckingLinks) void handleCheckLinks();
+      return;
+    }
+    if (action === "clear-link-marks") {
+      resetLinkStatus();
+      showToast(t("link_marks_cleared"));
       setContextMenu(null);
       return;
     }
@@ -299,7 +387,7 @@ export default function App() {
       return;
     }
     if (action === "delete-folder") {
-      if (node) await handleDeleteFolderWithUndo(node.id, node.title);
+      if (node) setDeleteCandidate({ kind: "folder", node });
       setContextMenu(null);
       return;
     }
@@ -318,45 +406,39 @@ export default function App() {
   }, []);
 
   return (
-    <div
-      className="app"
-      style={{
-        zoom,
-        width: `${100 / zoom}%`,
-        height: `${100 / zoom}%`,
-      }}
-    >
-      <Header
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        darkMode={darkMode}
-        onDarkModeChange={setDarkMode}
-        simplifyTitles={simplifyTitles}
-        onSimplifyTitlesChange={setSimplifyTitles}
-        zoom={zoom}
-        onZoomChange={setZoom}
-        searchRef={searchRef}
-      />
+    <div className="app" style={{ "--ui-scale": zoom } as React.CSSProperties}>
+      <div className="app-scaled-content">
+        <Header
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          darkMode={darkMode}
+          onDarkModeChange={setDarkMode}
+          simplifyTitles={simplifyTitles}
+          onSimplifyTitlesChange={setSimplifyTitles}
+          showRootFolders={showRootFolders}
+          onShowRootFoldersChange={setShowRootFolders}
+          zoom={zoom}
+          onZoomChange={setZoom}
+          searchRef={searchRef}
+        />
 
-      <div className="main-layout">
-        <main className="grid-layout">
-          <GridView
-            tree={tree}
-            searchQuery={searchQuery}
-            onMove={moveBookmark}
-            onContextMenu={handleBookmarkContextMenu}
-            onBackgroundContextMenu={handleBackgroundContextMenu}
-            onCheckLinks={handleCheckLinks}
-            isCheckingLinks={isCheckingLinks}
-            brokenCount={visibleBrokenCount}
-            getLinkStatus={getStatus}
-            sortMode={sortMode}
-            onSortModeChange={setSortMode}
-            alphabeticalDirection={alphabeticalDirection}
-            onAlphabeticalDirectionChange={setAlphabeticalDirection}
-            simplifyTitles={simplifyTitles}
-          />
-        </main>
+        <div className="main-layout">
+          <main className="grid-layout">
+            <GridView
+              tree={tree}
+              searchQuery={searchQuery}
+              onMove={moveBookmark}
+              onContextMenu={handleBookmarkContextMenu}
+              onBackgroundContextMenu={handleBackgroundContextMenu}
+              getLinkStatus={getStatus}
+              sortMode={sortMode}
+              alphabeticalDirection={alphabeticalDirection}
+              simplifyTitles={simplifyTitles}
+              showRootFolders={showRootFolders}
+              uiScale={zoom}
+            />
+          </main>
+        </div>
       </div>
 
       {contextMenu && (
@@ -365,6 +447,10 @@ export default function App() {
           y={contextMenu.y}
           kind={contextMenu.kind}
           isRootFolder={contextMenu.node?.parentId === "0" || contextMenu.node?.id === "0"}
+          sortMode={sortMode}
+          alphabeticalDirection={alphabeticalDirection}
+          isCheckingLinks={isCheckingLinks}
+          brokenCount={visibleBrokenCount}
           onAction={handleContextMenuAction}
         />
       )}
@@ -391,10 +477,21 @@ export default function App() {
 
       {deleteCandidate && (
         <ConfirmDialog
-          message={t("delete_confirm", { count: 1 })}
+          message={
+            deleteCandidate.kind === "folder"
+              ? t("delete_folder_confirm", { title: deleteCandidate.node.title || t("untitled") })
+              : t("delete_confirm", { count: 1 })
+          }
           onCancel={() => setDeleteCandidate(null)}
           onConfirm={async () => {
-            await deleteBookmarkWithUndo(deleteCandidate.id);
+            if (deleteCandidate.kind === "folder") {
+              await handleDeleteFolderWithUndo(
+                deleteCandidate.node.id,
+                deleteCandidate.node.title || t("untitled")
+              );
+            } else {
+              await deleteBookmarkWithUndo(deleteCandidate.node.id);
+            }
             setDeleteCandidate(null);
           }}
         />

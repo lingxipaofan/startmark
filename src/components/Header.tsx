@@ -10,6 +10,8 @@ interface Props {
   onDarkModeChange: (v: boolean) => void;
   simplifyTitles: boolean;
   onSimplifyTitlesChange: (value: boolean) => void;
+  showRootFolders: boolean;
+  onShowRootFoldersChange: (value: boolean) => void;
   zoom?: number;
   onZoomChange?: (value: number) => void;
   searchRef?: React.RefObject<HTMLInputElement | null>;
@@ -22,6 +24,8 @@ export default function Header({
   onDarkModeChange,
   simplifyTitles,
   onSimplifyTitlesChange,
+  showRootFolders,
+  onShowRootFoldersChange,
   zoom = 1,
   onZoomChange = () => undefined,
   searchRef,
@@ -63,6 +67,8 @@ export default function Header({
           onDarkModeChange={onDarkModeChange}
           simplifyTitles={simplifyTitles}
           onSimplifyTitlesChange={onSimplifyTitlesChange}
+          showRootFolders={showRootFolders}
+          onShowRootFoldersChange={onShowRootFoldersChange}
           zoom={zoom}
           onZoomChange={onZoomChange}
           onClose={() => setSettingsOpen(false)}

@@ -8,6 +8,8 @@ interface Props {
   onDarkModeChange: (value: boolean) => void;
   simplifyTitles: boolean;
   onSimplifyTitlesChange: (value: boolean) => void;
+  showRootFolders: boolean;
+  onShowRootFoldersChange: (value: boolean) => void;
   zoom: number;
   onZoomChange: (value: number) => void;
   onClose: () => void;
@@ -18,6 +20,8 @@ export default function SettingsModal({
   onDarkModeChange,
   simplifyTitles,
   onSimplifyTitlesChange,
+  showRootFolders,
+  onShowRootFoldersChange,
   zoom,
   onZoomChange,
   onClose,
@@ -114,7 +118,7 @@ export default function SettingsModal({
                 type="range"
                 min="0.75"
                 max="1.25"
-                step="0.05"
+                step="any"
                 value={zoom}
                 aria-label={t("zoom")}
                 onChange={(event) => onZoomChange(Number(event.target.value))}
@@ -131,6 +135,22 @@ export default function SettingsModal({
                 aria-label={t("simplify_titles")}
                 checked={simplifyTitles}
                 onChange={(event) => onSimplifyTitlesChange(event.target.checked)}
+              />
+              <span className="settings-switch-track" aria-hidden="true">
+                <span className="settings-switch-thumb" />
+              </span>
+            </label>
+            <label className="settings-row settings-switch-row" title={t("show_root_folders_hint")}>
+              <span className="settings-label-copy">
+                <strong>{t("show_root_folders")}</strong>
+                <small>{t("show_root_folders_hint")}</small>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                aria-label={t("show_root_folders")}
+                checked={showRootFolders}
+                onChange={(event) => onShowRootFoldersChange(event.target.checked)}
               />
               <span className="settings-switch-track" aria-hidden="true">
                 <span className="settings-switch-thumb" />

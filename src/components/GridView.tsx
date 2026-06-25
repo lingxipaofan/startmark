@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
-import { ArrowUpDown, Check, ChevronDown, Link2, LoaderCircle } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import type { BookmarkNode, LinkStatus } from "../lib/types";
 import { useI18n, timeBucket } from "../lib/i18n";
 import {
@@ -25,21 +25,18 @@ interface Props {
   onMove: (id: string, destinationFolderId: string, index?: number) => void | Promise<void>;
   onContextMenu: (e: React.MouseEvent, node: BookmarkNode) => void;
   onBackgroundContextMenu: (e: React.MouseEvent) => void;
-  onCheckLinks?: () => void;
-  isCheckingLinks?: boolean;
-  brokenCount?: number;
   getLinkStatus?: (id: string) => LinkStatus;
   sortMode: SortMode;
-  onSortModeChange: (mode: SortMode) => void;
   alphabeticalDirection: AlphabeticalDirection;
-  onAlphabeticalDirectionChange: (direction: AlphabeticalDirection) => void;
   simplifyTitles: boolean;
+  showRootFolders: boolean;
+  uiScale: number;
 }
 
 interface FolderSection {
   folder: BookmarkNode;
   bookmarks: BookmarkNode[];
-  breadcrumb: string[]; // ancestor titles, e.g. ["书签栏", "工作"]
+  breadcrumb: string[]; // ancestor titles, e.g. ["涔︾鏍?, "宸ヤ綔"]
 }
 
 type DragItem = {
@@ -83,28 +80,22 @@ export default function GridView({
   onMove,
   onContextMenu,
   onBackgroundContextMenu,
-  onCheckLinks,
-  isCheckingLinks,
-  brokenCount,
   getLinkStatus,
   sortMode,
-  onSortModeChange,
   alphabeticalDirection,
-  onAlphabeticalDirectionChange,
   simplifyTitles,
+  showRootFolders,
+  uiScale,
 }: Props) {
   const { t } = useI18n();
-  const [sections, setSections] = useState<FolderSection[]>([]);
   const [dragPreviewOrder, setDragPreviewOrder] = useState<DragOrderState | null>(null);
   const [crossFolderPreview, setCrossFolderPreview] = useState<{
     bookmark: BookmarkNode;
     targetFolderId: string;
   } | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
-  const [showSortMenu, setShowSortMenu] = useState(false);
   const [masonryColumnCount, setMasonryColumnCount] = useState<number>();
   const [masonryWidth, setMasonryWidth] = useState<number>();
-  const [useSingleRowGrid, setUseSingleRowGrid] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
   const dragData = useRef<DragItem | null>(null);
   const dragOriginRect = useRef<DOMRect | null>(null);
@@ -120,54 +111,62 @@ export default function GridView({
   const documentDropHandler = useRef<(event: DragEvent) => void>(() => undefined);
   const [draggingItem, setDraggingItem] = useState<DragItem | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
-  const sortMenuRef = useRef<HTMLDivElement>(null);
 
-  // Build sections: each folder with bookmarks or sub-folders = one column
-  useEffect(() => {
+  const sections = useMemo(() => {
     const result: FolderSection[] = [];
     const walk = (nodes: BookmarkNode[], ancestors: BookmarkNode[] = []) => {
       for (const node of nodes) {
         if (!node.children) continue;
         const directBms = node.children.filter((c) => !!c.url);
-        result.push({
-          folder: node,
-          bookmarks: directBms,
-          breadcrumb: ancestors.map((a) => a.title),
-        });
+        const isBrowserRoot = node.id === "0";
+        const isRootContainer = node.parentId === "0";
+        if (!isBrowserRoot && (!isRootContainer || showRootFolders)) {
+          result.push({
+            folder: node,
+            bookmarks: directBms,
+            breadcrumb: ancestors
+              .filter((ancestor) => ancestor.id !== "0" && ancestor.parentId !== "0")
+              .map((ancestor) => ancestor.title),
+          });
+        }
         walk(node.children, [...ancestors, node]);
       }
     };
     walk(tree);
-    setSections(result);
-  }, [tree]);
-
-  useEffect(() => {
-    if (!showSortMenu) return;
-    const handler = (e: MouseEvent) => {
-      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
-        setShowSortMenu(false);
-      }
-    };
-    setTimeout(() => document.addEventListener("click", handler), 0);
-    return () => document.removeEventListener("click", handler);
-  }, [showSortMenu]);
-
+    return result;
+  }, [tree, showRootFolders]);
 
   useEffect(() => {
     if (!draggingItem) return;
-    const handleDocumentDragOver = (event: DragEvent) => documentDragOverHandler.current(event);
+    const lockDocumentDragCursor = (event: DragEvent) => {
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "move";
+      }
+    };
+    const handleDocumentDragOver = (event: DragEvent) => {
+      lockDocumentDragCursor(event);
+      documentDragOverHandler.current(event);
+    };
+    const handleDocumentDragEnter = (event: DragEvent) => {
+      lockDocumentDragCursor(event);
+    };
     const handleDocumentDrop = (event: DragEvent) => documentDropHandler.current(event);
     document.body.classList.add("drag-active");
+    document.documentElement.classList.add("drag-active");
+    document.addEventListener("dragenter", handleDocumentDragEnter);
     document.addEventListener("dragover", handleDocumentDragOver);
     document.addEventListener("drop", handleDocumentDrop);
     return () => {
       document.body.classList.remove("drag-active");
+      document.documentElement.classList.remove("drag-active");
+      document.removeEventListener("dragenter", handleDocumentDragEnter);
       document.removeEventListener("dragover", handleDocumentDragOver);
       document.removeEventListener("drop", handleDocumentDrop);
     };
   }, [draggingItem]);
 
-  // Time-sorted — oldest first
+  // Time-sorted 鈥?oldest first
   const timeSortedBookmarks = useMemo(() => {
     const all: BookmarkNode[] = [];
     for (const s of sections) {
@@ -200,21 +199,17 @@ export default function GridView({
   }, [timeSortedBookmarks, t]);
 
   const orderedFolderSections = useMemo(() => {
-    const activeCustomOrder = dragPreviewOrder;
-    const useCustomOrder = dragPreviewOrder !== null;
-    const rootSections = sections.filter((section) => section.folder.parentId === "0");
-    const regularSections = sections.filter((section) => section.folder.parentId !== "0");
-    const orderedRegularSections = useCustomOrder
-      ? orderByIds(regularSections, activeCustomOrder.folderIds, (section) => section.folder.id)
+    const orderedSections = dragPreviewOrder
+      ? orderByIds(sections, dragPreviewOrder.folderIds, (section) => section.folder.id)
       : sortMode === "alphabetical"
       ? sortBookmarkNodes(
-          regularSections.map((section) => section.folder),
+          sections.map((section) => section.folder),
           sortMode,
           alphabeticalDirection
-        ).map((folder) => regularSections.find((section) => section.folder.id === folder.id)!)
-      : regularSections;
+        ).map((folder) => sections.find((section) => section.folder.id === folder.id)!)
+      : sections;
 
-    return [...rootSections, ...orderedRegularSections].map((section) => {
+    return orderedSections.map((section) => {
       const sectionBookmarks = crossFolderPreview?.targetFolderId === section.folder.id
         ? [
             ...section.bookmarks,
@@ -223,10 +218,11 @@ export default function GridView({
         : section.bookmarks;
       return {
         ...section,
-        bookmarks: useCustomOrder
+        breadcrumbLabel: section.breadcrumb.slice(-2).join(" / "),
+        bookmarks: dragPreviewOrder
         ? orderByIds(
             sectionBookmarks,
-            activeCustomOrder.bookmarkIdsByFolder[section.folder.id] || [],
+            dragPreviewOrder.bookmarkIdsByFolder[section.folder.id] || [],
             (bookmark) => bookmark.id
           )
         : sortBookmarkNodes(sectionBookmarks, sortMode, alphabeticalDirection),
@@ -254,6 +250,49 @@ export default function GridView({
       }))
       .filter((section) => section.bookmarks.length > 0);
   }, [orderedFolderSections, searchQuery]);
+
+  const buildMasonryColumns = <T,>(
+    items: T[],
+    columnCount: number,
+    getWeight: (item: T) => number
+  ) => {
+    const safeColumnCount = Math.max(1, columnCount);
+    const columns = Array.from({ length: safeColumnCount }, () => [] as T[]);
+    const columnWeights = Array.from({ length: safeColumnCount }, () => 0);
+
+    items.forEach((item) => {
+      const targetColumnIndex = columnWeights.reduce(
+        (bestIndex, weight, index) => weight < columnWeights[bestIndex] ? index : bestIndex,
+        0
+      );
+      columns[targetColumnIndex].push(item);
+      columnWeights[targetColumnIndex] += getWeight(item);
+    });
+
+    return columns;
+  };
+
+  const activeMasonryColumnCount = masonryColumnCount || 1;
+
+  const folderMasonryColumns = useMemo(
+    () => buildMasonryColumns(
+      displayedFolderSections,
+      activeMasonryColumnCount,
+      (section) => collapsedSections.has(section.folder.id)
+        ? 1
+        : 1 + Math.max(0, section.bookmarks.length)
+    ),
+    [displayedFolderSections, activeMasonryColumnCount, collapsedSections]
+  );
+
+  const timeMasonryColumns = useMemo(
+    () => buildMasonryColumns(
+      timeGroups,
+      activeMasonryColumnCount,
+      (group) => 1 + group.bookmarks.length
+    ),
+    [timeGroups, activeMasonryColumnCount]
+  );
 
   const toggleSection = (id: string) => {
     const positions = new Map<string, { left: number; top: number }>();
@@ -554,7 +593,7 @@ export default function GridView({
       );
     } else {
       setCrossFolderPreview(null);
-      next.folderIds = moveIdRelative(next.folderIds, item.node.id, folder.id, "after");
+      next.folderIds = next.folderIds.filter((id) => id !== item.node.id);
     }
     setDragPreviewOrder(next);
   };
@@ -639,6 +678,23 @@ export default function GridView({
     }
     if (!nearestFolder) return;
     const rect = nearestFolder.rect;
+    const edgeX = rect.width * 0.22;
+    const edgeY = rect.height * 0.28;
+    const isInsideIntent =
+      e.clientX > rect.left + edgeX &&
+      e.clientX < rect.right - edgeX &&
+      e.clientY > rect.top + edgeY &&
+      e.clientY < rect.bottom - edgeY;
+    if (isInsideIntent) {
+      queueDragPreview({
+        key: `inside:${nearestFolder.node.id}`,
+        x: e.clientX,
+        y: e.clientY,
+        target: { kind: "inside", id: nearestFolder.node.id },
+        apply: () => previewInsideMove(item, nearestFolder!.node),
+      });
+      return;
+    }
     const useHorizontalEdge = Math.abs(e.clientX - (rect.left + rect.width / 2)) > rect.width * 0.4;
     const position: DropPosition = useHorizontalEdge
       ? e.clientX < rect.left + rect.width / 2 ? "before" : "after"
@@ -664,6 +720,21 @@ export default function GridView({
     const rect = e.currentTarget.getBoundingClientRect();
     const pointerPosition: DropPosition = e.clientY < rect.top + rect.height / 2 ? "before" : "after";
     const acceptedDropTarget = committedDropTarget.current;
+    if (acceptedDropTarget?.kind === "inside") {
+      const acceptedFolder = findNode(tree, acceptedDropTarget.id);
+      if (
+        acceptedFolder?.children &&
+        item.node.id !== acceptedFolder.id &&
+        !(item.type === "folder" && findNode(item.node.children || [], acceptedFolder.id))
+      ) {
+        try {
+          await onMove(item.node.id, acceptedFolder.id, undefined);
+        } finally {
+          clearDragState();
+        }
+        return;
+      }
+    }
     const acceptedNode = acceptedDropTarget?.kind === type
       ? findNode(tree, acceptedDropTarget.id)
       : null;
@@ -747,6 +818,8 @@ export default function GridView({
   };
 
   const handleFolderRightClick = (e: React.MouseEvent, node: BookmarkNode) => {
+    e.preventDefault();
+    e.stopPropagation();
     onContextMenu(e, node);
   };
 
@@ -762,26 +835,35 @@ export default function GridView({
     const updateColumnCount = () => {
       const gridStyles = getComputedStyle(grid);
       const containerStyles = getComputedStyle(container);
-      const cellWidth = Number.parseFloat(gridStyles.getPropertyValue("--grid-cell-width")) || 240;
-      const columnGap = Number.parseFloat(gridStyles.columnGap) || 12;
-      const availableWidth = container.clientWidth
-        - Number.parseFloat(containerStyles.paddingLeft)
-        - Number.parseFloat(containerStyles.paddingRight);
+      const firstSection = grid.querySelector<HTMLElement>(".grid-section");
+      const firstCard = grid.querySelector<HTMLElement>(".grid-card");
+      const measuredCellWidth = firstSection?.getBoundingClientRect().width
+        || firstCard?.getBoundingClientRect().width
+        || 240 * uiScale;
+      const measuredColumnGap = Number.parseFloat(gridStyles.columnGap);
+      const cellWidth = measuredCellWidth;
+      const columnGap = Number.isFinite(measuredColumnGap) ? measuredColumnGap : 12 * uiScale;
+      const availableWidth = Math.max(
+        0,
+        container.clientWidth
+          - Number.parseFloat(containerStyles.paddingLeft)
+          - Number.parseFloat(containerStyles.paddingRight)
+      );
       const availableColumns = Math.max(
         1,
         Math.floor((availableWidth + columnGap) / (cellWidth + columnGap))
       );
       const nextColumnCount = Math.min(renderedSectionCount, availableColumns);
+      const nextMasonryWidth = nextColumnCount * cellWidth + (nextColumnCount - 1) * columnGap;
       setMasonryColumnCount(nextColumnCount);
-      setMasonryWidth(nextColumnCount * cellWidth + (nextColumnCount - 1) * columnGap);
-      setUseSingleRowGrid(renderedSectionCount <= availableColumns);
+      setMasonryWidth(nextMasonryWidth);
     };
 
     updateColumnCount();
     const observer = new ResizeObserver(updateColumnCount);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [renderedSectionCount]);
+  }, [renderedSectionCount, uiScale]);
 
   if (!hasItems) {
     return (
@@ -796,106 +878,20 @@ export default function GridView({
       ref={gridRef}
       onDrop={handleGridDrop}
       onContextMenu={onBackgroundContextMenu}
-      className={`grid-view ${useSingleRowGrid ? "single-row-grid" : ""}`}
+      className="grid-view"
       style={masonryColumnCount
-        ? useSingleRowGrid
-          ? {
-              width: masonryWidth,
-              gridTemplateColumns: `repeat(${masonryColumnCount}, var(--grid-cell-width))`,
-            }
-          : { width: masonryWidth, columnCount: masonryColumnCount }
+        ? {
+            width: masonryWidth,
+            gridTemplateColumns: `repeat(${masonryColumnCount}, var(--grid-cell-width))`,
+          }
         : undefined}
     >
-      <div className="floating-tool floating-tool-left" ref={sortMenuRef}>
-        <button
-          type="button"
-          className={`floating-tool-button ${showSortMenu ? "active" : ""}`}
-          onClick={() => setShowSortMenu((open) => !open)}
-          aria-label={t("sort_options")}
-          aria-haspopup="menu"
-          aria-expanded={showSortMenu}
-          title={t("sort_options")}
-        >
-          <ArrowUpDown size={17} aria-hidden="true" />
-        </button>
-        {showSortMenu && (
-          <div className="sort-popover" role="menu">
-            <button
-              type="button"
-              className={sortMode === "folder" ? "active" : ""}
-              onClick={() => {
-                onSortModeChange("folder");
-                setShowSortMenu(false);
-              }}
-              role="menuitem"
-            >
-              <span className="sort-popover-check">{sortMode === "folder" && <Check size={14} />}</span>
-              {t("sort_chrome")}
-            </button>
-            <button
-              type="button"
-              className={sortMode === "alphabetical" && alphabeticalDirection === "asc" ? "active" : ""}
-              onClick={() => {
-                onAlphabeticalDirectionChange("asc");
-                onSortModeChange("alphabetical");
-                setShowSortMenu(false);
-              }}
-              role="menuitem"
-            >
-              <span className="sort-popover-check">{sortMode === "alphabetical" && alphabeticalDirection === "asc" && <Check size={14} />}</span>
-              {t("sort_name_asc")}
-            </button>
-            <button
-              type="button"
-              className={sortMode === "alphabetical" && alphabeticalDirection === "desc" ? "active" : ""}
-              onClick={() => {
-                onAlphabeticalDirectionChange("desc");
-                onSortModeChange("alphabetical");
-                setShowSortMenu(false);
-              }}
-              role="menuitem"
-            >
-              <span className="sort-popover-check">{sortMode === "alphabetical" && alphabeticalDirection === "desc" && <Check size={14} />}</span>
-              {t("sort_name_desc")}
-            </button>
-            <button
-              type="button"
-              className={sortMode === "time" ? "active" : ""}
-              onClick={() => {
-                onSortModeChange("time");
-                setShowSortMenu(false);
-              }}
-              role="menuitem"
-            >
-              <span className="sort-popover-check">{sortMode === "time" && <Check size={14} />}</span>
-              {t("sort_by_time")}
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="floating-tool floating-tool-right">
-        <button
-          type="button"
-          className="floating-tool-button"
-          onClick={onCheckLinks}
-          disabled={isCheckingLinks || !onCheckLinks}
-          aria-label={t("check_links")}
-          title={brokenCount ? t("broken_found", { count: brokenCount }) : t("check_links")}
-        >
-          {isCheckingLinks
-            ? <LoaderCircle className="floating-tool-spinner" size={17} aria-hidden="true" />
-            : <Link2 size={17} aria-hidden="true" />}
-          {!!brokenCount && !isCheckingLinks && (
-            <span className="floating-tool-badge" aria-hidden="true">{brokenCount > 99 ? "99+" : brokenCount}</span>
-          )}
-        </button>
-      </div>
-
-      {/* Folder mode — each folder = one column */}
+      {/* Folder mode 鈥?centered masonry columns */}
       {sortMode !== "time" &&
-        displayedFolderSections.map((section) => (
-          <div
+        folderMasonryColumns.map((column, columnIndex) => (
+          <div className="grid-masonry-column" key={`folder-column-${columnIndex}`}>
+            {column.map((section) => (
+              <div
             key={section.folder.id}
             data-folder-id={section.folder.id}
             data-drag-layout-id={`folder:${section.folder.id}`}
@@ -918,12 +914,15 @@ export default function GridView({
               onDrop={(e) => void handleRelativeDrop(e, section.folder, "folder")}
               onDragEnd={clearDragState}
             >
-              <span className="grid-section-icon">📁</span>
+              <span className="grid-section-icon">馃搧</span>
               <div className="grid-section-title-wrap">
                 <h2 className="grid-section-title">{section.folder.title}</h2>
+                {section.breadcrumbLabel && (
+                  <span className="grid-section-path">{section.breadcrumbLabel}</span>
+                )}
                 {section.breadcrumb.length > 0 && (
                   <span className="grid-section-breadcrumb">
-                    {section.breadcrumb.join(" › ")}
+                    {section.breadcrumb.join(" 鈥?")}
                   </span>
                 )}
               </div>
@@ -962,21 +961,25 @@ export default function GridView({
                 </div>
               </div>
             </div>
+              </div>
+            ))}
           </div>
         ))}
 
       {/* Time mode */}
       {sortMode === "time" &&
-        timeGroups.map((group) => (
-          <div
+        timeMasonryColumns.map((column, columnIndex) => (
+          <div className="grid-masonry-column" key={`time-column-${columnIndex}`}>
+            {column.map((group) => (
+              <div
             key={group.label}
             className="grid-section"
             data-drag-layout-id={`time:${group.label}`}
           >
             <div className="grid-section-header">
-              <span className="grid-section-icon">🕐</span>
+              <span className="grid-section-icon">馃晲</span>
               <h2 className="grid-section-title">{group.label}</h2>
-              <span className="grid-section-count">· {group.bookmarks.length}</span>
+              <span className="grid-section-count">路 {group.bookmarks.length}</span>
             </div>
             <div className="grid-section-body">
               {group.bookmarks.map((bm) => (
@@ -997,6 +1000,8 @@ export default function GridView({
                 />
               ))}
             </div>
+              </div>
+            ))}
           </div>
         ))}
 
@@ -1004,7 +1009,7 @@ export default function GridView({
   );
 }
 
-// ─── Bookmark Card ───
+// 鈹€鈹€鈹€ Bookmark Card 鈹€鈹€鈹€
 
 function safeFaviconUrl(url: string | undefined): string {
   if (!url) return "";
@@ -1063,6 +1068,8 @@ function BookmarkCard({
         className="grid-card-favicon"
         src={safeFaviconUrl(bm.url)}
         alt=""
+        loading="lazy"
+        decoding="async"
         onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
       />
       <span className="grid-card-title">
@@ -1070,9 +1077,15 @@ function BookmarkCard({
           ? simplifyBookmarkTitle(bm.title || t("untitled"))
           : bm.title || t("untitled")}
       </span>
-      {status === "checking" && <span className="grid-card-status status-checking">{t("link_checking")}</span>}
-      {status === "valid" && <span className="grid-card-status status-valid" title={t("link_valid")}>✓</span>}
-      {status === "broken" && <span className="grid-card-status status-broken" title={t("link_broken")}>✗</span>}
+      {status === "checking" && (
+        <span className="grid-card-status status-checking" title={t("link_checking")} aria-label={t("link_checking")} />
+      )}
+      {status === "valid" && (
+        <span className="grid-card-status status-valid" title={t("link_valid")} aria-label={t("link_valid")} />
+      )}
+      {status === "broken" && (
+        <span className="grid-card-status status-broken" title={t("link_broken")} aria-label={t("link_broken")} />
+      )}
     </div>
   );
 }

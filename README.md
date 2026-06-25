@@ -40,7 +40,7 @@ npm test
 
 ## 致谢
 
-本项目由 [makerjackie/pinmark](https://github.com/makerjackie/pinmark) fork 而来，基于 MIT 协议。
+本项目由 [lingxipaofan/startmark](https://github.com/lingxipaofan/startmark) fork 而来，基于 MIT 协议。
 
 ## License
 

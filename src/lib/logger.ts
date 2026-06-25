@@ -1,4 +1,4 @@
-const PREFIX = "[Pinmark]";
+const PREFIX = "[Startmark]";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 

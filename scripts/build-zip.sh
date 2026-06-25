@@ -4,12 +4,12 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-echo "Building Pinmark..."
+echo "Building Startmark..."
 npm run build
 
 echo "Creating ZIP..."
 VERSION=$(node -p "require('./package.json').version")
 mkdir -p dist-website
-zip -j "dist-website/pinmark-v${VERSION}.zip" .output/chrome-mv3/* -x "*.DS_Store"
+zip -j "dist-website/startmark-v${VERSION}.zip" .output/chrome-mv3/* -x "*.DS_Store"
 
-echo "Done: dist-website/pinmark-v0.1.zip"
+echo "Done: dist-website/startmark-v${VERSION}.zip"

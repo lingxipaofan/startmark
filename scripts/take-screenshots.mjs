@@ -12,14 +12,14 @@ async function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// Build a standalone HTML page that mimics the Pinmark UI in grid view
+// Build a standalone HTML page that mimics the Startmark UI in grid view
 function buildGridPage() {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Pinmark - Grid View</title>
+<title>Startmark - Grid View</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
@@ -80,7 +80,7 @@ body {
 </head>
 <body>
 <div class="header">
-  <div class="header-left"><h1>🔖 Pinmark</h1><span>v1.0.0</span></div>
+  <div class="header-left"><h1>🔖 Startmark</h1><span>v0.1</span></div>
   <div class="search-box">
     <span style="opacity:.4">🔍</span>
     <input type="text" placeholder="搜索书签..." value=""/>
@@ -153,7 +153,7 @@ function buildListPage() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Pinmark - List View</title>
+<title>Startmark - List View</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
@@ -221,7 +221,7 @@ body {
 </head>
 <body>
 <div class="header">
-  <div class="header-left"><h1>🔖 Pinmark</h1><span>v1.0.0</span></div>
+  <div class="header-left"><h1>🔖 Startmark</h1><span>v0.1</span></div>
   <div class="search-box">
     <span style="opacity:.4">🔍</span>
     <input type="text" placeholder="搜索书签..." value=""/>
@@ -298,7 +298,7 @@ function buildDarkPage() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Pinmark - Dark Mode</title>
+<title>Startmark - Dark Mode</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
@@ -358,7 +358,7 @@ body {
 </head>
 <body>
 <div class="header">
-  <div class="header-left"><h1>🔖 Pinmark</h1><span>v1.0.0</span></div>
+  <div class="header-left"><h1>🔖 Startmark</h1><span>v0.1</span></div>
   <div class="search-box">
     <span style="opacity:.4">🔍</span>
     <input type="text" placeholder="搜索书签..." value=""/>
@@ -431,7 +431,7 @@ function buildSearchPage() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Pinmark - Search</title>
+<title>Startmark - Search</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
@@ -482,7 +482,7 @@ body {
 </head>
 <body>
 <div class="header">
-  <div class="header-left"><h1>🔖 Pinmark</h1><span>v1.0.0</span></div>
+  <div class="header-left"><h1>🔖 Startmark</h1><span>v0.1</span></div>
   <div class="search-box">
     <span style="opacity:.4">🔍</span>
     <input type="text" placeholder="搜索书签..." value="React"/>

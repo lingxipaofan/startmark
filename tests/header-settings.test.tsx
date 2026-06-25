@@ -14,6 +14,8 @@ function renderHeader(overrides = {}) {
     onDarkModeChange: vi.fn(),
     simplifyTitles: false,
     onSimplifyTitlesChange: vi.fn(),
+    showRootFolders: true,
+    onShowRootFoldersChange: vi.fn(),
     ...overrides,
   };
 
@@ -55,11 +57,16 @@ describe("Header settings", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Short titles" }));
     expect(props.onSimplifyTitlesChange).toHaveBeenCalledWith(true);
 
+    fireEvent.click(screen.getByRole("switch", { name: "Show root folders" }));
+    expect(props.onShowRootFoldersChange).toHaveBeenCalledWith(false);
+
     const zoomChange = vi.fn();
     cleanup();
     renderHeader({ zoom: 1, onZoomChange: zoomChange });
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-    fireEvent.change(screen.getByRole("slider", { name: "Interface scale" }), {
+    const zoomSlider = screen.getByRole("slider", { name: "Interface scale" });
+    expect(zoomSlider.getAttribute("step")).toBe("any");
+    fireEvent.change(zoomSlider, {
       target: { value: "1.15" },
     });
     expect(zoomChange).toHaveBeenCalledWith(1.15);
