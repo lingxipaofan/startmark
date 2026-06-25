@@ -9,7 +9,7 @@ npm run build
 
 echo "Creating ZIP..."
 VERSION=$(node -p "require('./package.json').version")
-mkdir -p dist-website
-zip -j "dist-website/startmark-v${VERSION}.zip" .output/chrome-mv3/* -x "*.DS_Store"
+mkdir -p dist
+zip -j "dist/startmark-v${VERSION}.zip" .output/chrome-mv3/* -x "*.DS_Store"
 
-echo "Done: dist-website/startmark-v${VERSION}.zip"
+echo "Done: dist/startmark-v${VERSION}.zip"

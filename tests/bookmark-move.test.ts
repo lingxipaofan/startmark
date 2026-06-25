@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getRelativeMoveDestination } from "../src/lib/bookmark-move";
+import { getRelativeMoveDestination } from "../src/lib/custom-order";
 import type { BookmarkNode } from "../src/lib/types";
 
 const node = (id: string, parentId: string, index: number): BookmarkNode => ({

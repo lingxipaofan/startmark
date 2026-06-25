@@ -10,13 +10,11 @@ import {
 import { simplifyBookmarkTitle } from "../lib/bookmark-title";
 import {
   getRelativeMoveDestination,
-  type DropPosition,
-} from "../lib/bookmark-move";
-import {
   moveIdRelative,
   moveIdToEnd,
   orderByIds,
   type DragOrderState,
+  type DropPosition,
 } from "../lib/custom-order";
 
 interface Props {
