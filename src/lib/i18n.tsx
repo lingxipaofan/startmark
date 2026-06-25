@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 
 export type Locale = "zh-CN" | "en" | "ja";
 
-const STORAGE_KEY = "pinmark-locale";
+const STORAGE_KEY = "startmark-locale";
 
 const LOCALE_LABELS: Record<Locale, string> = {
   "zh-CN": "中文",

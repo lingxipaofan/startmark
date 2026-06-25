@@ -25,7 +25,7 @@ describe("ConfirmDialog", () => {
 
   beforeEach(() => {
     localStorage.clear();
-    localStorage.setItem("pinmark-locale", "en");
+    localStorage.setItem("startmark-locale", "en");
   });
 
   it("uses an app dialog and focuses the safe action", () => {

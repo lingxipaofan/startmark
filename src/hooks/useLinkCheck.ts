@@ -3,7 +3,7 @@ import type { LinkStatus } from "../lib/types";
 
 const TIMEOUT_MS = 4000;
 const MAX_CONCURRENT = 6;
-const STORAGE_KEY = "pinmark-link-cache";
+const STORAGE_KEY = "startmark-link-cache";
 
 interface CachedEntry {
   status: LinkStatus;

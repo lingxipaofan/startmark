@@ -27,7 +27,7 @@ describe("ContextMenu", () => {
 
   beforeEach(() => {
     localStorage.clear();
-    localStorage.setItem("pinmark-locale", "en");
+    localStorage.setItem("startmark-locale", "en");
   });
 
   it("shows refresh in the background menu", () => {

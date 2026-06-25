@@ -35,8 +35,8 @@ export default function Header({
 
   React.useEffect(() => {
     const openSettings = () => setSettingsOpen(true);
-    window.addEventListener("pinmark-open-settings", openSettings);
-    return () => window.removeEventListener("pinmark-open-settings", openSettings);
+    window.addEventListener("startmark-open-settings", openSettings);
+    return () => window.removeEventListener("startmark-open-settings", openSettings);
   }, []);
 
   return (

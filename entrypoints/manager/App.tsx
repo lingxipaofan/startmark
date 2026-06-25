@@ -20,9 +20,9 @@ import {
 } from "../../src/lib/bookmark-sort";
 
 const EXT_VERSION = chrome.runtime.getManifest().version;
-const SIMPLIFY_TITLES_KEY = "pinmark-simplify-titles";
-const ZOOM_KEY = "pinmark-zoom";
-const SHOW_ROOT_FOLDERS_KEY = "pinmark-show-root-folders";
+const SIMPLIFY_TITLES_KEY = "startmark-simplify-titles";
+const ZOOM_KEY = "startmark-zoom";
+const SHOW_ROOT_FOLDERS_KEY = "startmark-show-root-folders";
 
 type EditorState =
   | { kind: "rename"; id: string; initialValue: string }
@@ -69,7 +69,7 @@ export default function App() {
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<DeleteCandidate | null>(null);
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("pinmark-dark") === "true");
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("startmark-dark") === "true");
   const [sortMode, setSortMode] = useState<SortMode>(readSortMode);
   const [alphabeticalDirection, setAlphabeticalDirection] =
     useState<AlphabeticalDirection>(readAlphabeticalDirection);
@@ -100,7 +100,7 @@ export default function App() {
   // Dark mode effect
   React.useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
-    localStorage.setItem("pinmark-dark", String(darkMode));
+    localStorage.setItem("startmark-dark", String(darkMode));
   }, [darkMode]);
 
   React.useEffect(() => {
@@ -392,7 +392,7 @@ export default function App() {
       return;
     }
     if (action === "settings") {
-      window.dispatchEvent(new Event("pinmark-open-settings"));
+      window.dispatchEvent(new Event("startmark-open-settings"));
       setContextMenu(null);
       return;
     }

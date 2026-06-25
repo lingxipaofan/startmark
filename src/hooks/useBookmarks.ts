@@ -8,7 +8,7 @@ import {
   createBookmarkFolder,
 } from "../lib/bookmark-utils";
 
-const BOOKMARK_TREE_CACHE_KEY = "pinmark-bookmark-tree-cache";
+const BOOKMARK_TREE_CACHE_KEY = "startmark-bookmark-tree-cache";
 
 function readCachedBookmarkTree(): BookmarkNode[] {
   try {

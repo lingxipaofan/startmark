@@ -3,8 +3,8 @@ import type { BookmarkNode } from "./types";
 export type SortMode = "folder" | "alphabetical" | "time";
 export type AlphabeticalDirection = "asc" | "desc";
 
-export const SORT_MODE_KEY = "pinmark-grid-sort-mode";
-export const ALPHABETICAL_DIRECTION_KEY = "pinmark-alphabetical-direction";
+export const SORT_MODE_KEY = "startmark-grid-sort-mode";
+export const ALPHABETICAL_DIRECTION_KEY = "startmark-alphabetical-direction";
 
 export function readSortMode(): SortMode {
   const stored = localStorage.getItem(SORT_MODE_KEY);

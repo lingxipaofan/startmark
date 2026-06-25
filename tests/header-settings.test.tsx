@@ -32,7 +32,7 @@ describe("Header settings", () => {
 
   beforeEach(() => {
     localStorage.clear();
-    localStorage.setItem("pinmark-locale", "en");
+    localStorage.setItem("startmark-locale", "en");
   });
 
   it("renders navigation-only controls", () => {
@@ -76,7 +76,7 @@ describe("Header settings", () => {
     fireEvent.change(languageSelect, {
       target: { value: "ja" },
     });
-    expect(localStorage.getItem("pinmark-locale")).toBe("ja");
+    expect(localStorage.getItem("startmark-locale")).toBe("ja");
     expect(document.activeElement).toBe(languageSelect);
   });
 
