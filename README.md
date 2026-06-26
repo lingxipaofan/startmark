@@ -35,11 +35,18 @@ Stack: WXT · React · TypeScript · Vite
 
 Build then load `.output/chrome-mv3` as an unpacked extension at `chrome://extensions/` (Developer mode required).
 
+### Known issues
+
+- [ ] Folder title flickers during resize animation
+
 ### Roadmap
 
 - [ ] Improve folder drag-and-drop UX
 - [x] Support hiding specific folders
 - [ ] Fix zoom animation layout jitter
+- [ ] Click search button to select default search engine
+- [ ] Redesign large folder style
+- [ ] Add animation for other folders after folder resize
 
 ### Credits
 
@@ -80,11 +87,18 @@ npm test
 
 构建后在 Chrome 打开 `chrome://extensions/`，开启「开发者模式」，加载 `.output/chrome-mv3` 目录。
 
+### 已知问题
+
+- [ ] 缩放文件夹时标题闪动
+
 ### 计划
 
 - [ ] 优化文件夹拖拽方式
 - [x] 支持隐藏特定文件夹
 - [ ] 修复文件夹缩放时动画/布局抖动
+- [ ] 点击搜索按钮选择默认搜索引擎
+- [ ] 更改大文件夹样式
+- [ ] 添加文件夹缩放后其余文件夹的动画
 
 ### 致谢
 
