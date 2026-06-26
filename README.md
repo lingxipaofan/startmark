@@ -38,7 +38,8 @@ Build then load `.output/chrome-mv3` as an unpacked extension at `chrome://exten
 ### Roadmap
 
 - [ ] Improve folder drag-and-drop UX
-- [ ] Support hiding specific folders
+- [x] Support hiding specific folders
+- [ ] Fix zoom animation layout jitter
 
 ### Credits
 
@@ -82,7 +83,8 @@ npm test
 ### 计划
 
 - [ ] 优化文件夹拖拽方式
-- [ ] 支持隐藏特定文件夹
+- [x] 支持隐藏特定文件夹
+- [ ] 修复文件夹缩放时动画/布局抖动
 
 ### 致谢
 
