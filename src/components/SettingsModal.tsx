@@ -2,7 +2,12 @@ import React, { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Check, X } from "lucide-react";
 import { useI18n, type Locale } from "../lib/i18n";
-import { SEARCH_ENGINES, type SearchEngineId } from "../lib/search-engine";
+import {
+  BUILT_IN_SEARCH_ENGINES,
+  createCustomSearchEngine,
+  type CustomSearchEngine,
+  type SearchEngineId,
+} from "../lib/search-engine";
 
 interface Props {
   darkMode: boolean;
@@ -11,8 +16,8 @@ interface Props {
   onSimplifyTitlesChange: (value: boolean) => void;
   searchEngine: SearchEngineId;
   onSearchEngineChange: (value: SearchEngineId) => void;
-  customSearchTemplate: string;
-  onCustomSearchTemplateChange: (value: string) => void;
+  customSearchEngines: CustomSearchEngine[];
+  onCustomSearchEnginesChange: (value: CustomSearchEngine[]) => void;
   showRootFolders: boolean;
   onShowRootFoldersChange: (value: boolean) => void;
   zoom: number;
@@ -27,8 +32,8 @@ export default function SettingsModal({
   onSimplifyTitlesChange,
   searchEngine,
   onSearchEngineChange,
-  customSearchTemplate,
-  onCustomSearchTemplateChange,
+  customSearchEngines,
+  onCustomSearchEnginesChange,
   showRootFolders,
   onShowRootFoldersChange,
   zoom,
@@ -37,6 +42,32 @@ export default function SettingsModal({
 }: Props) {
   const { t, locale, setLocale, locales } = useI18n();
   const closeRef = useRef<HTMLButtonElement>(null);
+
+  const updateCustomEngine = (id: string, patch: Partial<CustomSearchEngine>) => {
+    onCustomSearchEnginesChange(
+      customSearchEngines.map((engine) =>
+        engine.id === id ? { ...engine, ...patch } : engine
+      )
+    );
+  };
+
+  const addCustomEngine = () => {
+    const engine = createCustomSearchEngine();
+    const next = [
+      ...customSearchEngines,
+      {
+        ...engine,
+        title: t("custom_search_engine"),
+      },
+    ];
+    onCustomSearchEnginesChange(next);
+    onSearchEngineChange(engine.id);
+  };
+
+  const deleteCustomEngine = (id: SearchEngineId) => {
+    onCustomSearchEnginesChange(customSearchEngines.filter((engine) => engine.id !== id));
+    if (searchEngine === id) onSearchEngineChange("browser");
+  };
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -125,28 +156,58 @@ export default function SettingsModal({
                 value={searchEngine}
                 onChange={(event) => onSearchEngineChange(event.target.value as SearchEngineId)}
               >
-                {SEARCH_ENGINES.map((engine) => (
+                {BUILT_IN_SEARCH_ENGINES.map((engine) => (
                   <option key={engine.id} value={engine.id}>
                     {engine.label.includes("_") ? t(engine.label) : engine.label}
                   </option>
                 ))}
+                {customSearchEngines.length > 0 && (
+                  <optgroup label={t("custom_search_engines")}>
+                    {customSearchEngines.map((engine) => (
+                      <option key={engine.id} value={engine.id}>
+                        {engine.title.trim() || t("custom_search_engine")}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </label>
-            {searchEngine === "custom" && (
-              <label className="settings-text-field">
+            <div className="settings-custom-engines">
+              <div className="settings-custom-engines-header">
                 <span className="settings-label-copy">
-                  <strong>{t("custom_search_template")}</strong>
+                  <strong>{t("custom_search_engines")}</strong>
                   <small>{t("custom_search_template_hint")}</small>
                 </span>
-                <input
-                  type="url"
-                  value={customSearchTemplate}
-                  placeholder="https://example.com/search?q=%s"
-                  aria-label={t("custom_search_template")}
-                  onChange={(event) => onCustomSearchTemplateChange(event.target.value)}
-                />
-              </label>
-            )}
+                <button type="button" className="settings-inline-button" onClick={addCustomEngine}>
+                  {t("add_search_engine")}
+                </button>
+              </div>
+              {customSearchEngines.map((engine) => (
+                <div className="settings-custom-engine-card" key={engine.id}>
+                  <input
+                    type="text"
+                    value={engine.title}
+                    placeholder={t("custom_search_title")}
+                    aria-label={t("custom_search_title")}
+                    onChange={(event) => updateCustomEngine(engine.id, { title: event.target.value })}
+                  />
+                  <input
+                    type="url"
+                    value={engine.template}
+                    placeholder="https://example.com/search?q=%s"
+                    aria-label={t("custom_search_template")}
+                    onChange={(event) => updateCustomEngine(engine.id, { template: event.target.value })}
+                  />
+                  <button
+                    type="button"
+                    className="settings-inline-button danger"
+                    onClick={() => deleteCustomEngine(engine.id)}
+                  >
+                    {t("delete_search_engine")}
+                  </button>
+                </div>
+              ))}
+            </div>
           </section>
 
           <section className="settings-group" aria-labelledby="display-heading">

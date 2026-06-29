@@ -1,7 +1,12 @@
 import React from "react";
-import { Search, Settings } from "lucide-react";
+import { Check, Search, Settings } from "lucide-react";
 import { useI18n } from "../lib/i18n";
-import { getSearchEngineOption, type SearchEngineId } from "../lib/search-engine";
+import {
+  getSearchEngineOption,
+  getSearchEngineOptions,
+  type CustomSearchEngine,
+  type SearchEngineId,
+} from "../lib/search-engine";
 import SettingsModal from "./SettingsModal";
 
 interface Props {
@@ -10,8 +15,8 @@ interface Props {
   onSearchSubmit: (q: string) => void;
   searchEngine: SearchEngineId;
   onSearchEngineChange: (value: SearchEngineId) => void;
-  customSearchTemplate: string;
-  onCustomSearchTemplateChange: (value: string) => void;
+  customSearchEngines: CustomSearchEngine[];
+  onCustomSearchEnginesChange: (value: CustomSearchEngine[]) => void;
   darkMode: boolean;
   onDarkModeChange: (v: boolean) => void;
   simplifyTitles: boolean;
@@ -29,8 +34,8 @@ export default function Header({
   onSearchSubmit,
   searchEngine,
   onSearchEngineChange,
-  customSearchTemplate,
-  onCustomSearchTemplateChange,
+  customSearchEngines,
+  onCustomSearchEnginesChange,
   darkMode,
   onDarkModeChange,
   simplifyTitles,
@@ -43,7 +48,10 @@ export default function Header({
 }: Props) {
   const { t } = useI18n();
   const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const searchEngineOption = getSearchEngineOption(searchEngine);
+  const [engineMenuOpen, setEngineMenuOpen] = React.useState(false);
+  const engineMenuRef = React.useRef<HTMLDivElement>(null);
+  const searchEngineOptions = getSearchEngineOptions(customSearchEngines);
+  const searchEngineOption = getSearchEngineOption(searchEngine, customSearchEngines);
   const searchEngineLabel = searchEngineOption.label.includes("_")
     ? t(searchEngineOption.label)
     : searchEngineOption.label;
@@ -53,6 +61,16 @@ export default function Header({
     window.addEventListener("startmark-open-settings", openSettings);
     return () => window.removeEventListener("startmark-open-settings", openSettings);
   }, []);
+
+  React.useEffect(() => {
+    if (!engineMenuOpen) return;
+    const closeMenu = (event: MouseEvent) => {
+      if (engineMenuRef.current?.contains(event.target as Node)) return;
+      setEngineMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeMenu);
+    return () => document.removeEventListener("mousedown", closeMenu);
+  }, [engineMenuOpen]);
 
   return (
     <header className="header">
@@ -64,7 +82,44 @@ export default function Header({
           onSearchSubmit(searchQuery);
         }}
       >
-        <Search className="search-icon" size={18} aria-hidden="true" />
+        <div className="search-engine-picker" ref={engineMenuRef}>
+          <button
+            type="button"
+            className="search-engine-button"
+            aria-label={t("select_search_engine")}
+            title={searchEngineLabel}
+            aria-haspopup="menu"
+            aria-expanded={engineMenuOpen}
+            onClick={() => setEngineMenuOpen((open) => !open)}
+          >
+            <Search size={18} aria-hidden="true" />
+          </button>
+          {engineMenuOpen && (
+            <div className="search-engine-menu" role="menu">
+              {searchEngineOptions.map((engine) => {
+                const label = engine.label.includes("_") ? t(engine.label) : engine.label;
+                return (
+                  <button
+                    key={engine.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={searchEngine === engine.id}
+                    className="search-engine-menu-item"
+                    onClick={() => {
+                      onSearchEngineChange(engine.id);
+                      setEngineMenuOpen(false);
+                    }}
+                  >
+                    <span className="search-engine-menu-check" aria-hidden="true">
+                      {searchEngine === engine.id && <Check size={14} />}
+                    </span>
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
         <input
           ref={searchRef}
           type="text"
@@ -92,8 +147,8 @@ export default function Header({
           onSimplifyTitlesChange={onSimplifyTitlesChange}
           searchEngine={searchEngine}
           onSearchEngineChange={onSearchEngineChange}
-          customSearchTemplate={customSearchTemplate}
-          onCustomSearchTemplateChange={onCustomSearchTemplateChange}
+          customSearchEngines={customSearchEngines}
+          onCustomSearchEnginesChange={onCustomSearchEnginesChange}
           showRootFolders={showRootFolders}
           onShowRootFoldersChange={onShowRootFoldersChange}
           zoom={zoom}

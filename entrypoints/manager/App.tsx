@@ -19,12 +19,13 @@ import {
   type SortMode,
 } from "../../src/lib/bookmark-sort";
 import {
-  CUSTOM_SEARCH_TEMPLATE_KEY,
+  CUSTOM_SEARCH_ENGINES_KEY,
   SEARCH_ENGINE_KEY,
   buildSearchUrl,
   getSearchEngineOption,
-  readCustomSearchTemplate,
+  readCustomSearchEngines,
   readSearchEngine,
+  type CustomSearchEngine,
   type SearchEngineId,
 } from "../../src/lib/search-engine";
 
@@ -104,7 +105,8 @@ export default function App() {
     () => localStorage.getItem(SHOW_HIDDEN_FOLDERS_KEY) === "true"
   );
   const [searchEngine, setSearchEngine] = useState<SearchEngineId>(readSearchEngine);
-  const [customSearchTemplate, setCustomSearchTemplate] = useState(readCustomSearchTemplate);
+  const [customSearchEngines, setCustomSearchEngines] =
+    useState<CustomSearchEngine[]>(readCustomSearchEngines);
   const [scrollFade, setScrollFade] = useState({ top: false, bottom: false });
   const [zoom, setZoom] = useState(() => {
     const stored = Number(localStorage.getItem(ZOOM_KEY));
@@ -160,8 +162,14 @@ export default function App() {
   }, [searchEngine]);
 
   React.useEffect(() => {
-    localStorage.setItem(CUSTOM_SEARCH_TEMPLATE_KEY, customSearchTemplate);
-  }, [customSearchTemplate]);
+    localStorage.setItem(CUSTOM_SEARCH_ENGINES_KEY, JSON.stringify(customSearchEngines));
+  }, [customSearchEngines]);
+
+  React.useEffect(() => {
+    if (!searchEngine.startsWith("custom:")) return;
+    if (customSearchEngines.some((engine) => engine.id === searchEngine)) return;
+    setSearchEngine("browser");
+  }, [customSearchEngines, searchEngine]);
 
   React.useEffect(() => {
     localStorage.setItem(ZOOM_KEY, String(zoom));
@@ -332,12 +340,10 @@ export default function App() {
   const handleWebSearch = useCallback(async (query: string) => {
     const text = query.trim();
     if (!text) return;
-    const selectedEngine = getSearchEngineOption(searchEngine);
+    const selectedEngine = getSearchEngineOption(searchEngine, customSearchEngines);
 
     if (selectedEngine.id !== "browser") {
-      const template = selectedEngine.id === "custom"
-        ? customSearchTemplate
-        : selectedEngine.template || "";
+      const template = selectedEngine.template || "";
       await chrome.tabs.update({ url: buildSearchUrl(template, text) });
       return;
     }
@@ -353,7 +359,7 @@ export default function App() {
     await chrome.tabs.update({
       url: `https://www.google.com/search?q=${encodeURIComponent(text)}`,
     });
-  }, [customSearchTemplate, searchEngine]);
+  }, [customSearchEngines, searchEngine]);
 
   const handleContextMenuAction = async (action: string) => {
     if (!contextMenu) return;
@@ -522,8 +528,8 @@ export default function App() {
           onSearchSubmit={handleWebSearch}
           searchEngine={searchEngine}
           onSearchEngineChange={setSearchEngine}
-          customSearchTemplate={customSearchTemplate}
-          onCustomSearchTemplateChange={setCustomSearchTemplate}
+          customSearchEngines={customSearchEngines}
+          onCustomSearchEnginesChange={setCustomSearchEngines}
           darkMode={darkMode}
           onDarkModeChange={setDarkMode}
           simplifyTitles={simplifyTitles}

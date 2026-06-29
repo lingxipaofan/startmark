@@ -13,8 +13,8 @@ function renderHeader(overrides = {}) {
     onSearchSubmit: vi.fn(),
     searchEngine: "browser" as const,
     onSearchEngineChange: vi.fn(),
-    customSearchTemplate: "",
-    onCustomSearchTemplateChange: vi.fn(),
+    customSearchEngines: [],
+    onCustomSearchEnginesChange: vi.fn(),
     darkMode: false,
     onDarkModeChange: vi.fn(),
     simplifyTitles: false,
@@ -42,7 +42,7 @@ describe("Header settings", () => {
 
   it("renders navigation-only controls", () => {
     renderHeader();
-    expect(screen.getByText("Browser default")).toBeTruthy();
+    expect(screen.getByText("Search")).toBeTruthy();
     expect(screen.queryByText("List")).toBeNull();
     expect(screen.queryByText("Grid")).toBeNull();
     expect(screen.queryByTitle("Show folders")).toBeNull();
@@ -79,15 +79,30 @@ describe("Header settings", () => {
     });
     expect(props.onSearchEngineChange).toHaveBeenCalledWith("bing");
 
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(props.onCustomSearchEnginesChange).toHaveBeenCalledWith([
+      expect.objectContaining({ title: "Custom", template: "" }),
+    ]);
+
     cleanup();
-    const customProps = renderHeader({ searchEngine: "custom", customSearchTemplate: "https://s.test/?q=%s" });
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-    const templateInput = screen.getByRole("textbox", { name: "Search URL template" });
-    expect(templateInput.getAttribute("value")).toBe("https://s.test/?q=%s");
-    fireEvent.change(templateInput, {
-      target: { value: "https://search.test/%s" },
+    const customProps = renderHeader({
+      customSearchEngines: [{ id: "custom:test", title: "Docs", template: "https://docs.test/?q=%s" }],
     });
-    expect(customProps.onCustomSearchTemplateChange).toHaveBeenCalledWith("https://search.test/%s");
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), {
+      target: { value: "Docs Search" },
+    });
+    expect(customProps.onCustomSearchEnginesChange).toHaveBeenCalledWith([
+      { id: "custom:test", title: "Docs Search", template: "https://docs.test/?q=%s" },
+    ]);
+
+    cleanup();
+    const pickerProps = renderHeader({
+      customSearchEngines: [{ id: "custom:test", title: "Docs", template: "https://docs.test/?q=%s" }],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Select search engine" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /Docs/ }));
+    expect(pickerProps.onSearchEngineChange).toHaveBeenCalledWith("custom:test");
 
     const zoomChange = vi.fn();
     cleanup();
