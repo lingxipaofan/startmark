@@ -6,6 +6,7 @@ export interface BookmarkNode {
   index?: number;
   dateAdded?: number;
   children?: BookmarkNode[];
+  functionalKind?: "mostVisited" | "recentlyClosed";
 }
 
 export type LinkStatus = "unknown" | "valid" | "broken" | "checking";

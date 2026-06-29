@@ -69,6 +69,7 @@ const FOLDER_PREVIEW_STEP = 4;
 const MIN_FOLDER_PREVIEW_LIMIT = 4;
 const MAX_FOLDER_PREVIEW_LIMIT = 16;
 const FOLDER_PREVIEW_LIMITS_KEY = "startmark-folder-preview-limits";
+const FOLDER_CUSTOM_ORDER_KEY = "startmark-folder-custom-order";
 const FOLDER_HEIGHT_SCALE = 0.95;
 const GRID_CELL_HEIGHT = 30 * FOLDER_HEIGHT_SCALE;
 const GRID_CELL_GAP = 5 * FOLDER_HEIGHT_SCALE;
@@ -97,6 +98,15 @@ function readFolderPreviewLimits(): Record<string, number> {
     );
   } catch {
     return {};
+  }
+}
+
+function readFolderCustomOrder(): string[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(FOLDER_CUSTOM_ORDER_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
   }
 }
 
@@ -172,6 +182,7 @@ export default function GridView({
   const [activeTimeGroupLabel, setActiveTimeGroupLabel] = useState<string | null>(null);
   const [isClosingDetail, setIsClosingDetail] = useState(false);
   const [folderPreviewLimits, setFolderPreviewLimits] = useState<Record<string, number>>(readFolderPreviewLimits);
+  const [folderCustomOrder, setFolderCustomOrder] = useState<string[]>(readFolderCustomOrder);
   const [resizingPreview, setResizingPreview] = useState<{ folderId: string; limit: number } | null>(null);
   const [masonryColumnCount, setMasonryColumnCount] = useState<number>();
   const [masonryWidth, setMasonryWidth] = useState<number>();
@@ -203,6 +214,12 @@ export default function GridView({
       localStorage.setItem(FOLDER_PREVIEW_LIMITS_KEY, JSON.stringify(folderPreviewLimits));
     } catch { /* ignore */ }
   }, [folderPreviewLimits]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(FOLDER_CUSTOM_ORDER_KEY, JSON.stringify(folderCustomOrder));
+    } catch { /* ignore */ }
+  }, [folderCustomOrder]);
 
   const getFolderPreviewLimit = useCallback(
     (folderId: string) => folderPreviewLimits[folderId] || DEFAULT_FOLDER_PREVIEW_LIMIT,
@@ -303,7 +320,7 @@ export default function GridView({
           sortMode,
           alphabeticalDirection
         ).map((folder) => sections.find((section) => section.folder.id === folder.id)!)
-      : sections;
+      : orderByIds(sections, folderCustomOrder, (section) => section.folder.id);
 
     return orderedSections.map((section) => {
       const sectionBookmarks = crossFolderPreview?.targetFolderId === section.folder.id
@@ -330,6 +347,7 @@ export default function GridView({
     alphabeticalDirection,
     dragPreviewOrder,
     crossFolderPreview,
+    folderCustomOrder,
   ]);
 
   const displayedFolderSections = useMemo(() => {
@@ -695,6 +713,14 @@ export default function GridView({
     };
   };
 
+  const commitFolderCustomOrder = useCallback((draggedId: string, targetId: string, position: DropPosition) => {
+    const baseIds = orderedFolderSections.map((section) => section.folder.id);
+    setFolderCustomOrder((prev) => {
+      const orderedIds = orderByIds(baseIds, prev, (id) => id);
+      return moveIdRelative(orderedIds, draggedId, targetId, position);
+    });
+  }, [orderedFolderSections]);
+
   const previewRelativeMove = (
     item: DragItem,
     target: BookmarkNode,
@@ -804,7 +830,7 @@ export default function GridView({
     for (const slot of snapshot.folders) {
       if (slot.id === item.node.id) continue;
       const node = findNode(tree, slot.id);
-      if (!node?.children || node.parentId === "0") continue;
+      if (!node?.children || (!node.functionalKind && node.parentId === "0")) continue;
       if (item.type === "folder" && findNode(item.node.children || [], slot.id)) continue;
 
       const centerX = slot.rect.left + slot.rect.width / 2;
@@ -962,6 +988,7 @@ export default function GridView({
       for (const slot of snapshot.folders) {
         if (slot.hasBookmarks) continue;
         const node = findNode(tree, slot.id);
+        if (node?.functionalKind) continue;
         if (!node?.children) continue;
         const score = distanceToRect(clientX, clientY, slot.rect);
         if (!nearestFolder || score < nearestFolder.score) nearestFolder = { node, score };
@@ -1028,6 +1055,8 @@ export default function GridView({
     if (finalTarget.id === item.node.id) return clearDragState();
     if (
       type === "folder" &&
+      !item.node.functionalKind &&
+      !finalTarget.functionalKind &&
       (finalTarget.parentId === "0" || findNode(item.node.children || [], finalTarget.id))
     ) return clearDragState();
     const position = getRelativeDropPosition(
@@ -1038,10 +1067,18 @@ export default function GridView({
       e.clientY,
       rect
     );
+    if (type === "folder" && (item.node.functionalKind || finalTarget.functionalKind)) {
+      commitFolderCustomOrder(item.node.id, finalTarget.id, position);
+      return clearDragState();
+    }
+    if (item.node.functionalKind || finalTarget.functionalKind) return clearDragState();
     const destination = getRelativeMoveDestination(item.node, finalTarget, position);
     if (!destination) return clearDragState();
     try {
       await onMove(item.node.id, destination.parentId, destination.index);
+      if (type === "folder") {
+        commitFolderCustomOrder(item.node.id, finalTarget.id, position);
+      }
     } finally {
       clearDragState();
     }
@@ -1055,6 +1092,7 @@ export default function GridView({
       const acceptedFolder = findNode(tree, acceptedDropTarget.id);
       if (
         acceptedFolder?.children &&
+        !acceptedFolder.functionalKind &&
         item.node.id !== acceptedFolder.id &&
         !(item.type === "folder" && findNode(item.node.children || [], acceptedFolder.id))
       ) {
@@ -1067,6 +1105,11 @@ export default function GridView({
     if (acceptedDropTarget.kind !== item.type) return false;
     const acceptedNode = findNode(tree, acceptedDropTarget.id);
     if (!acceptedNode || acceptedNode.id === item.node.id) return false;
+    if (item.type === "folder" && (acceptedNode.functionalKind || item.node.functionalKind)) {
+      commitFolderCustomOrder(item.node.id, acceptedNode.id, acceptedDropTarget.position);
+      return true;
+    }
+    if (acceptedNode.functionalKind || item.node.functionalKind) return false;
     if (
       item.type === "folder" &&
       (acceptedNode.parentId === "0" || findNode(item.node.children || [], acceptedNode.id))
@@ -1079,6 +1122,9 @@ export default function GridView({
     );
     if (!destination) return false;
     await onMove(item.node.id, destination.parentId, destination.index);
+    if (item.type === "folder") {
+      commitFolderCustomOrder(item.node.id, acceptedNode.id, acceptedDropTarget.position);
+    }
     return true;
   };
 
@@ -1098,6 +1144,7 @@ export default function GridView({
     if (committed || hadCommittedTarget) return;
 
     if (item.node.id === folder.id) return clearDragState();
+    if (item.node.functionalKind || folder.functionalKind) return clearDragState();
     if (item.type === "folder" && findNode(item.node.children || [], folder.id)) {
       return clearDragState();
     }
@@ -1306,7 +1353,7 @@ export default function GridView({
                 onDetailActiveChange?.(true);
               }}
               onContextMenu={(e) => handleFolderRightClick(e, section.folder)}
-              draggable={!searchQuery && section.folder.parentId !== "0" && section.folder.id !== "0"}
+              draggable={!searchQuery && (!!section.folder.functionalKind || (section.folder.parentId !== "0" && section.folder.id !== "0"))}
               onDragStart={(e) => handleDragStart(e, section.folder, "folder")}
               onDrop={(e) => void handleRelativeDrop(e, section.folder, "folder")}
               onDragEnd={clearDragState}
@@ -1352,7 +1399,7 @@ export default function GridView({
                         key={bm.id}
                         bm={bm}
                         layoutId={`${section.folder.id}:bookmark:${bm.id}`}
-                        draggableAllowed={!searchQuery}
+                        draggableAllowed={!searchQuery && !section.folder.functionalKind && !bm.functionalKind}
                         isDragging={draggingItem?.type === "bookmark" && draggingItem.node.id === bm.id}
                         isPreview={
                           crossFolderPreview?.bookmark.id === bm.id &&

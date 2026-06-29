@@ -14,6 +14,7 @@ interface Props {
   hiddenFolderCount?: number;
   showHiddenFolders?: boolean;
   isHiddenFolder?: boolean;
+  isFunctionalNode?: boolean;
   onAction: (action: string) => void;
 }
 
@@ -28,6 +29,7 @@ export default function ContextMenu({
   hiddenFolderCount = 0,
   showHiddenFolders = false,
   isHiddenFolder = false,
+  isFunctionalNode = false,
   onAction,
 }: Props) {
   const { t } = useI18n();
@@ -43,7 +45,7 @@ export default function ContextMenu({
     const nextY = Math.min(Math.max(margin, y), Math.max(margin, window.innerHeight - rect.height - margin));
     const flipSubmenu = nextX + rect.width + 184 > window.innerWidth - margin;
     setPosition({ x: nextX, y: nextY, ready: true, flipSubmenu });
-  }, [x, y, kind, hiddenFolderCount, showHiddenFolders, isCheckingLinks, brokenCount, sortMode, alphabeticalDirection]);
+  }, [x, y, kind, hiddenFolderCount, showHiddenFolders, isCheckingLinks, brokenCount, sortMode, alphabeticalDirection, isFunctionalNode]);
 
   const isSortActive = (action: string) =>
     (action === "sort-folder" && sortMode === "folder") ||
@@ -81,17 +83,21 @@ export default function ContextMenu({
           <div className="context-menu-item" onClick={() => onAction("open-incognito-window")}>
             {t("open_incognito_window")}
           </div>
-          <div className="context-menu-sep" />
-          <div className="context-menu-item" onClick={() => onAction("rename-bookmark")}>
-            {t("rename")}
-          </div>
-          <div className="context-menu-item" onClick={() => onAction("edit-url")}>
-            {t("edit_url")}
-          </div>
-          <div className="context-menu-sep" />
-          <div className="context-menu-item" onClick={() => onAction("delete-bookmark")}>
-            {t("delete_bookmark")}
-          </div>
+          {!isFunctionalNode && (
+            <>
+              <div className="context-menu-sep" />
+              <div className="context-menu-item" onClick={() => onAction("rename-bookmark")}>
+                {t("rename")}
+              </div>
+              <div className="context-menu-item" onClick={() => onAction("edit-url")}>
+                {t("edit_url")}
+              </div>
+              <div className="context-menu-sep" />
+              <div className="context-menu-item" onClick={() => onAction("delete-bookmark")}>
+                {t("delete_bookmark")}
+              </div>
+            </>
+          )}
         </>
       )}
 
@@ -100,9 +106,11 @@ export default function ContextMenu({
           <div className="context-menu-item" onClick={() => onAction("open-folder-tab-group")}>
             {t("open_all_in_tab_group")}
           </div>
-          <div className="context-menu-item" onClick={() => onAction("new-folder")}>
-            {t("new_subfolder")}
-          </div>
+          {!isFunctionalNode && (
+            <div className="context-menu-item" onClick={() => onAction("new-folder")}>
+              {t("new_subfolder")}
+            </div>
+          )}
           <div className="context-menu-sep" />
           <div
             className="context-menu-item"
@@ -110,12 +118,16 @@ export default function ContextMenu({
           >
             {isHiddenFolder ? t("show_folder") : t("hide_folder")}
           </div>
-          <div className="context-menu-item" onClick={() => onAction("rename-folder")}>
-            {t("rename")}
-          </div>
-          <div className="context-menu-item" onClick={() => onAction("delete-folder")}>
-            {t("delete_folder")}
-          </div>
+          {!isFunctionalNode && (
+            <>
+              <div className="context-menu-item" onClick={() => onAction("rename-folder")}>
+                {t("rename")}
+              </div>
+              <div className="context-menu-item" onClick={() => onAction("delete-folder")}>
+                {t("delete_folder")}
+              </div>
+            </>
+          )}
         </>
       )}
 
@@ -165,6 +177,9 @@ export default function ContextMenu({
           <div className="context-menu-sep" />
           <div className="context-menu-item" onClick={() => onAction("new-folder")}>
             {t("new_folder")}
+          </div>
+          <div className="context-menu-item" onClick={() => onAction("open-bookmark-manager")}>
+            {t("open_bookmark_manager")}
           </div>
         </>
       )}

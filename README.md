@@ -38,6 +38,7 @@ Build then load `.output/chrome-mv3` as an unpacked extension at `chrome://exten
 ### Known issues
 
 - [ ] Folder title flickers during resize animation
+- [ ] Folder drag preview can replay a redundant swap animation after drop
 
 ### Roadmap
 
@@ -91,6 +92,7 @@ npm test
 ### 已知问题
 
 - [ ] 缩放文件夹时标题闪动
+- [ ] 文件夹拖拽预览后，松手时可能重复播放一次交换动画
 
 ### 计划
 

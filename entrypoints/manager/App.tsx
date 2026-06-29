@@ -35,6 +35,8 @@ const ZOOM_KEY = "startmark-zoom";
 const LEGACY_SHOW_ROOT_FOLDERS_KEY = "startmark-show-root-folders";
 const HIDDEN_FOLDERS_KEY = "startmark-hidden-folders";
 const SHOW_HIDDEN_FOLDERS_KEY = "startmark-show-hidden-folders";
+const MOST_VISITED_FOLDER_ID = "startmark:functional:most-visited";
+const RECENTLY_CLOSED_FOLDER_ID = "startmark:functional:recently-closed";
 
 function readHiddenFolderIds(): string[] {
   try {
@@ -104,6 +106,7 @@ export default function App() {
   const [searchEngine, setSearchEngine] = useState<SearchEngineId>(readSearchEngine);
   const [customSearchEngines, setCustomSearchEngines] =
     useState<CustomSearchEngine[]>(readCustomSearchEngines);
+  const [functionalFolders, setFunctionalFolders] = useState<BookmarkNode[]>([]);
   const [scrollFade, setScrollFade] = useState({ top: false, bottom: false });
   const [isDetailActive, setIsDetailActive] = useState(false);
   const [zoom, setZoom] = useState(() => {
@@ -184,6 +187,66 @@ export default function App() {
   const showToast = useCallback((message: string, onUndo?: () => void | Promise<void>) => {
     setToast({ message, onUndo });
   }, []);
+
+  const loadFunctionalFolders = useCallback(async () => {
+    const [topSites, recentlyClosed] = await Promise.all([
+      chrome.topSites.get().catch(() => [] as chrome.topSites.MostVisitedURL[]),
+      chrome.sessions.getRecentlyClosed({ maxResults: 24 }).catch(() => [] as chrome.sessions.Session[]),
+    ]);
+
+    const mostVisitedChildren: BookmarkNode[] = topSites.slice(0, 24).map((site, index) => ({
+      id: `${MOST_VISITED_FOLDER_ID}:${index}:${site.url}`,
+      parentId: MOST_VISITED_FOLDER_ID,
+      title: site.title || site.url,
+      url: site.url,
+      index,
+      functionalKind: "mostVisited",
+    }));
+
+    const recentlyClosedChildren: BookmarkNode[] = recentlyClosed
+      .flatMap((session) => {
+        if (session.tab?.url) return [session.tab];
+        return session.window?.tabs?.filter((tab) => !!tab.url) || [];
+      })
+      .slice(0, 24)
+      .map((tab, index) => ({
+        id: `${RECENTLY_CLOSED_FOLDER_ID}:${index}:${tab.sessionId || tab.id || tab.url}`,
+        parentId: RECENTLY_CLOSED_FOLDER_ID,
+        title: tab.title || tab.url || t("untitled"),
+        url: tab.url,
+        index,
+        dateAdded: tab.lastAccessed,
+        functionalKind: "recentlyClosed" as const,
+      }));
+
+    setFunctionalFolders([
+      {
+        id: MOST_VISITED_FOLDER_ID,
+        title: t("most_visited_folder"),
+        parentId: "0",
+        index: -2,
+        children: mostVisitedChildren,
+        functionalKind: "mostVisited",
+      },
+      {
+        id: RECENTLY_CLOSED_FOLDER_ID,
+        title: t("recently_closed_folder"),
+        parentId: "0",
+        index: -1,
+        children: recentlyClosedChildren,
+        functionalKind: "recentlyClosed",
+      },
+    ]);
+  }, [t]);
+
+  React.useEffect(() => {
+    void loadFunctionalFolders();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") void loadFunctionalFolders();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [loadFunctionalFolders]);
 
   // Save folder tree structure for undo
   const saveFolderTree = useCallback((node: chrome.bookmarks.BookmarkTreeNode): SavedTreeNode => ({
@@ -274,6 +337,10 @@ export default function App() {
   }, [tree]);
 
   const hiddenFolderIdSet = useMemo(() => new Set(hiddenFolderIds), [hiddenFolderIds]);
+  const gridTree = useMemo(
+    () => [...functionalFolders, ...tree],
+    [functionalFolders, tree]
+  );
 
   const toggleFolderHidden = useCallback(
     (node: BookmarkNode) => {
@@ -525,6 +592,11 @@ export default function App() {
       setContextMenu(null);
       return;
     }
+    if (action === "open-bookmark-manager") {
+      await chrome.tabs.create({ url: "chrome://bookmarks/" });
+      setContextMenu(null);
+      return;
+    }
     if (action === "settings") {
       window.dispatchEvent(new Event("startmark-open-settings"));
       setContextMenu(null);
@@ -586,7 +658,7 @@ export default function App() {
             onScroll={updateScrollFade}
           >
             <GridView
-              tree={tree}
+              tree={gridTree}
               searchQuery={searchQuery}
               onMove={moveBookmark}
               onContextMenu={handleBookmarkContextMenu}
@@ -618,6 +690,7 @@ export default function App() {
           hiddenFolderCount={hiddenFolderIds.length}
           showHiddenFolders={showHiddenFolders}
           isHiddenFolder={contextMenu.node ? hiddenFolderIdSet.has(contextMenu.node.id) : false}
+          isFunctionalNode={!!contextMenu.node?.functionalKind}
           onAction={handleContextMenuAction}
         />
       )}
