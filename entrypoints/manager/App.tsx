@@ -32,7 +32,7 @@ import {
 const EXT_VERSION = chrome.runtime.getManifest().version;
 const SIMPLIFY_TITLES_KEY = "startmark-simplify-titles";
 const ZOOM_KEY = "startmark-zoom";
-const SHOW_ROOT_FOLDERS_KEY = "startmark-show-root-folders";
+const LEGACY_SHOW_ROOT_FOLDERS_KEY = "startmark-show-root-folders";
 const HIDDEN_FOLDERS_KEY = "startmark-hidden-folders";
 const SHOW_HIDDEN_FOLDERS_KEY = "startmark-show-hidden-folders";
 
@@ -97,9 +97,6 @@ export default function App() {
   const [simplifyTitles, setSimplifyTitles] = useState(
     () => localStorage.getItem(SIMPLIFY_TITLES_KEY) === "true"
   );
-  const [showRootFolders, setShowRootFolders] = useState(
-    () => localStorage.getItem(SHOW_ROOT_FOLDERS_KEY) !== "false"
-  );
   const [hiddenFolderIds, setHiddenFolderIds] = useState<string[]>(readHiddenFolderIds);
   const [showHiddenFolders, setShowHiddenFolders] = useState(
     () => localStorage.getItem(SHOW_HIDDEN_FOLDERS_KEY) === "true"
@@ -108,6 +105,7 @@ export default function App() {
   const [customSearchEngines, setCustomSearchEngines] =
     useState<CustomSearchEngine[]>(readCustomSearchEngines);
   const [scrollFade, setScrollFade] = useState({ top: false, bottom: false });
+  const [isDetailActive, setIsDetailActive] = useState(false);
   const [zoom, setZoom] = useState(() => {
     const stored = Number(localStorage.getItem(ZOOM_KEY));
     return stored >= 0.75 && stored <= 1.25 ? stored : 1;
@@ -119,6 +117,7 @@ export default function App() {
   } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const gridLayoutRef = useRef<HTMLElement>(null);
+  const migratedRootFoldersRef = useRef(false);
   const {
     isChecking: isCheckingLinks,
     checkLinks,
@@ -144,10 +143,6 @@ export default function App() {
   React.useEffect(() => {
     localStorage.setItem(SIMPLIFY_TITLES_KEY, String(simplifyTitles));
   }, [simplifyTitles]);
-
-  React.useEffect(() => {
-    localStorage.setItem(SHOW_ROOT_FOLDERS_KEY, String(showRootFolders));
-  }, [showRootFolders]);
 
   React.useEffect(() => {
     localStorage.setItem(HIDDEN_FOLDERS_KEY, JSON.stringify(hiddenFolderIds));
@@ -263,7 +258,43 @@ export default function App() {
     () => filteredBookmarks.filter((bookmark) => getStatus(bookmark.id) === "broken").length,
     [filteredBookmarks, getStatus]
   );
+
+  React.useEffect(() => {
+    if (migratedRootFoldersRef.current) return;
+    if (localStorage.getItem(LEGACY_SHOW_ROOT_FOLDERS_KEY) !== "false") return;
+    const rootFolderIds = tree
+      .flatMap((node) => node.children || [])
+      .filter((node) => node.parentId === "0" && node.children)
+      .map((node) => node.id);
+    if (rootFolderIds.length > 0) {
+      setHiddenFolderIds((prev) => Array.from(new Set([...prev, ...rootFolderIds])));
+    }
+    localStorage.removeItem(LEGACY_SHOW_ROOT_FOLDERS_KEY);
+    migratedRootFoldersRef.current = true;
+  }, [tree]);
+
   const hiddenFolderIdSet = useMemo(() => new Set(hiddenFolderIds), [hiddenFolderIds]);
+
+  const toggleFolderHidden = useCallback(
+    (node: BookmarkNode) => {
+      const isHidden = hiddenFolderIdSet.has(node.id);
+      const title = node.title || t("untitled");
+      setHiddenFolderIds((prev) => {
+        if (isHidden) return prev.filter((id) => id !== node.id);
+        if (prev.includes(node.id)) return prev;
+        return [...prev, node.id];
+      });
+      showToast(
+        t(isHidden ? "folder_unhidden" : "folder_hidden", { title }),
+        isHidden
+          ? undefined
+          : () => {
+              setHiddenFolderIds((prev) => prev.filter((id) => id !== node.id));
+            }
+      );
+    },
+    [hiddenFolderIdSet, showToast, t]
+  );
 
   // Check links for current view
   const handleCheckLinks = useCallback(() => {
@@ -471,7 +502,12 @@ export default function App() {
     if (action === "hide-folder") {
       if (node) {
         setHiddenFolderIds((prev) => prev.includes(node.id) ? prev : [...prev, node.id]);
-        showToast(t("folder_hidden", { title: node.title || t("untitled") }));
+        showToast(
+          t("folder_hidden", { title: node.title || t("untitled") }),
+          () => {
+            setHiddenFolderIds((prev) => prev.filter((id) => id !== node.id));
+          }
+        );
       }
       setContextMenu(null);
       return;
@@ -515,9 +551,13 @@ export default function App() {
     );
   }, []);
 
+  const handleDetailActiveChange = useCallback((active: boolean) => {
+    setIsDetailActive(active);
+  }, []);
+
   React.useEffect(() => {
     updateScrollFade();
-  }, [filteredBookmarks, searchQuery, sortMode, showRootFolders, zoom, updateScrollFade]);
+  }, [filteredBookmarks, searchQuery, sortMode, zoom, updateScrollFade]);
 
   return (
     <div className="app" style={{ "--ui-scale": zoom } as React.CSSProperties}>
@@ -534,8 +574,6 @@ export default function App() {
           onDarkModeChange={setDarkMode}
           simplifyTitles={simplifyTitles}
           onSimplifyTitlesChange={setSimplifyTitles}
-          showRootFolders={showRootFolders}
-          onShowRootFoldersChange={setShowRootFolders}
           zoom={zoom}
           onZoomChange={setZoom}
           searchRef={searchRef}
@@ -544,7 +582,7 @@ export default function App() {
         <div className="main-layout">
           <main
             ref={gridLayoutRef}
-            className={`grid-layout ${scrollFade.top ? "has-top-fade" : ""} ${scrollFade.bottom ? "has-bottom-fade" : ""}`}
+            className={`grid-layout ${scrollFade.top ? "has-top-fade" : ""} ${scrollFade.bottom ? "has-bottom-fade" : ""} ${isDetailActive ? "has-detail-active" : ""}`}
             onScroll={updateScrollFade}
           >
             <GridView
@@ -553,11 +591,12 @@ export default function App() {
               onMove={moveBookmark}
               onContextMenu={handleBookmarkContextMenu}
               onBackgroundContextMenu={handleBackgroundContextMenu}
+              onToggleFolderHidden={toggleFolderHidden}
+              onDetailActiveChange={handleDetailActiveChange}
               getLinkStatus={getStatus}
               sortMode={sortMode}
               alphabeticalDirection={alphabeticalDirection}
               simplifyTitles={simplifyTitles}
-              showRootFolders={showRootFolders}
               hiddenFolderIds={hiddenFolderIdSet}
               showHiddenFolders={showHiddenFolders}
               uiScale={zoom}

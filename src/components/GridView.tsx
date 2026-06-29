@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, Clock3, Eye, EyeOff, Folder } from "lucide-react";
 import type { BookmarkNode, LinkStatus } from "../lib/types";
 import { useI18n, timeBucket } from "../lib/i18n";
 import {
@@ -23,11 +23,12 @@ interface Props {
   onMove: (id: string, destinationFolderId: string, index?: number) => void | Promise<void>;
   onContextMenu: (e: React.MouseEvent, node: BookmarkNode) => void;
   onBackgroundContextMenu: (e: React.MouseEvent) => void;
+  onToggleFolderHidden: (folder: BookmarkNode) => void;
+  onDetailActiveChange?: (active: boolean) => void;
   getLinkStatus?: (id: string) => LinkStatus;
   sortMode: SortMode;
   alphabeticalDirection: AlphabeticalDirection;
   simplifyTitles: boolean;
-  showRootFolders: boolean;
   hiddenFolderIds: Set<string>;
   showHiddenFolders: boolean;
   uiScale: number;
@@ -68,11 +69,12 @@ const FOLDER_PREVIEW_STEP = 4;
 const MIN_FOLDER_PREVIEW_LIMIT = 4;
 const MAX_FOLDER_PREVIEW_LIMIT = 16;
 const FOLDER_PREVIEW_LIMITS_KEY = "startmark-folder-preview-limits";
-const GRID_CELL_HEIGHT = 30;
-const GRID_CELL_GAP = 5;
-const GRID_SECTION_PADDING = 8;
-const GRID_SECTION_ROW_GAP = 14;
-const GRID_RESIZE_HANDLE_HEIGHT = 9;
+const FOLDER_HEIGHT_SCALE = 0.95;
+const GRID_CELL_HEIGHT = 30 * FOLDER_HEIGHT_SCALE;
+const GRID_CELL_GAP = 5 * FOLDER_HEIGHT_SCALE;
+const GRID_SECTION_PADDING = 8 * FOLDER_HEIGHT_SCALE;
+const GRID_SECTION_ROW_GAP = 14 * FOLDER_HEIGHT_SCALE;
+const GRID_RESIZE_HANDLE_HEIGHT = 9 * FOLDER_HEIGHT_SCALE;
 
 function clampFolderPreviewLimit(value: number): number {
   const clamped = Math.max(
@@ -120,6 +122,19 @@ function getFolderSnappedHeight(previewLimit: number, scale: number): number {
   return getFolderBaseHeight(scale) * level + GRID_SECTION_ROW_GAP * scale * (level - 1);
 }
 
+function getFolderRenderLimit(previewLimit: number, scale: number): number {
+  const availableBodyHeight =
+    getFolderSnappedHeight(previewLimit, scale) / scale -
+    GRID_SECTION_PADDING * 2 -
+    GRID_CELL_HEIGHT -
+    GRID_RESIZE_HANDLE_HEIGHT -
+    GRID_CELL_GAP * 2;
+  return Math.max(
+    MIN_FOLDER_PREVIEW_LIMIT,
+    Math.floor((availableBodyHeight + GRID_CELL_GAP) / (GRID_CELL_HEIGHT + GRID_CELL_GAP))
+  );
+}
+
 function findNode(nodes: BookmarkNode[], id: string): BookmarkNode | null {
   for (const node of nodes) {
     if (node.id === id) return node;
@@ -137,11 +152,12 @@ export default function GridView({
   onMove,
   onContextMenu,
   onBackgroundContextMenu,
+  onToggleFolderHidden,
+  onDetailActiveChange,
   getLinkStatus,
   sortMode,
   alphabeticalDirection,
   simplifyTitles,
-  showRootFolders,
   hiddenFolderIds,
   showHiddenFolders,
   uiScale,
@@ -153,10 +169,13 @@ export default function GridView({
     targetFolderId: string;
   } | null>(null);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
+  const [activeTimeGroupLabel, setActiveTimeGroupLabel] = useState<string | null>(null);
+  const [isClosingDetail, setIsClosingDetail] = useState(false);
   const [folderPreviewLimits, setFolderPreviewLimits] = useState<Record<string, number>>(readFolderPreviewLimits);
   const [resizingPreview, setResizingPreview] = useState<{ folderId: string; limit: number } | null>(null);
   const [masonryColumnCount, setMasonryColumnCount] = useState<number>();
   const [masonryWidth, setMasonryWidth] = useState<number>();
+  const [detailViewportTop, setDetailViewportTop] = useState(0);
   const gridRef = useRef<HTMLDivElement>(null);
   const dragData = useRef<DragItem | null>(null);
   const dragOriginRect = useRef<DOMRect | null>(null);
@@ -167,6 +186,7 @@ export default function GridView({
   const layoutRectsBeforePreview = useRef<Map<string, DOMRect> | null>(null);
   const stableLayoutRects = useRef<Map<string, DOMRect> | null>(null);
   const previousShowHiddenFolders = useRef(showHiddenFolders);
+  const previousVisibleSectionSignature = useRef("");
   const layoutAnimations = useRef<Map<string, Animation>>(new Map());
   const documentDragOverHandler = useRef<(event: DragEvent) => void>(() => undefined);
   const documentDropHandler = useRef<(event: DragEvent) => void>(() => undefined);
@@ -196,8 +216,7 @@ export default function GridView({
         if (!node.children) continue;
         const directBms = node.children.filter((c) => !!c.url);
         const isBrowserRoot = node.id === "0";
-        const isRootContainer = node.parentId === "0";
-        if (!isBrowserRoot && (!isRootContainer || showRootFolders)) {
+        if (!isBrowserRoot) {
           result.push({
             folder: node,
             bookmarks: directBms,
@@ -211,7 +230,7 @@ export default function GridView({
     };
     walk(tree);
     return result;
-  }, [tree, showRootFolders]);
+  }, [tree]);
 
   useEffect(() => {
     if (!draggingItem) return;
@@ -331,6 +350,11 @@ export default function GridView({
       .filter((section) => section.bookmarks.length > 0);
   }, [hiddenFolderIds, orderedFolderSections, searchQuery, showHiddenFolders]);
 
+  const visibleSectionSignature = useMemo(
+    () => displayedFolderSections.map((section) => section.folder.id).join("|"),
+    [displayedFolderSections]
+  );
+
   const buildMasonryColumns = <T,>(
     items: T[],
     columnCount: number,
@@ -367,7 +391,7 @@ export default function GridView({
     () => buildMasonryColumns(
       timeGroups,
       activeMasonryColumnCount,
-      (group) => 1 + group.bookmarks.length
+      () => 1
     ),
     [timeGroups, activeMasonryColumnCount]
   );
@@ -376,12 +400,23 @@ export default function GridView({
     if (bm.url) chrome.tabs.update({ url: bm.url });
   };
 
+  const closeActiveDetail = useCallback(() => {
+    if (isClosingDetail) return;
+    setIsClosingDetail(true);
+    onDetailActiveChange?.(false);
+    window.setTimeout(() => {
+      setActiveFolderId(null);
+      setActiveTimeGroupLabel(null);
+      setIsClosingDetail(false);
+    }, 160);
+  }, [isClosingDetail, onDetailActiveChange]);
+
   const getDragLayoutSnapshot = (): DragLayoutSnapshot | null => {
-    const grid = gridRef.current;
-    if (!grid) return null;
+    const root = getDragLayoutRoot();
+    if (!root) return null;
     return {
       bookmarks: Array.from(
-        grid.querySelectorAll<HTMLElement>("[data-bookmark-id]:not(.drag-preview-card)")
+        root.querySelectorAll<HTMLElement>("[data-bookmark-id]:not(.drag-preview-card)")
       )
       .filter((element) => !element.closest(".grid-section-collapse.collapsed"))
       .map((element) => ({
@@ -389,7 +424,7 @@ export default function GridView({
         rect: element.getBoundingClientRect(),
       })),
       folders: Array.from(
-        grid.querySelectorAll<HTMLElement>(".grid-section[data-folder-id]")
+        root.querySelectorAll<HTMLElement>(".grid-section[data-folder-id]")
       ).map((element) => ({
         id: element.dataset.folderId!,
         rect: element.getBoundingClientRect(),
@@ -401,6 +436,13 @@ export default function GridView({
     };
   };
 
+  const getDragLayoutRoot = (): HTMLElement | null => {
+    const grid = gridRef.current;
+    if (!grid) return null;
+    if (!activeDetail) return grid;
+    return grid.querySelector<HTMLElement>(".folder-detail-view") || grid;
+  };
+
   const handleFolderResizeStart = (
     e: React.PointerEvent<HTMLDivElement>,
     folderId: string
@@ -409,10 +451,13 @@ export default function GridView({
     e.stopPropagation();
     const startY = e.clientY;
     const startLimit = getFolderPreviewLimit(folderId);
+    const initialPreview = { folderId, limit: startLimit };
     const sizeStep = Math.max(
       1,
       getFolderBaseHeight(uiScale) + GRID_SECTION_ROW_GAP * uiScale
     );
+    resizingPreviewRef.current = initialPreview;
+    setResizingPreview(initialPreview);
     document.body.classList.add("resize-active");
     document.documentElement.classList.add("resize-active");
 
@@ -432,6 +477,9 @@ export default function GridView({
       const latestLimit = resizingPreviewRef.current?.folderId === folderId
         ? resizingPreviewRef.current.limit
         : startLimit;
+      if ((folderPreviewLimits[folderId] || DEFAULT_FOLDER_PREVIEW_LIMIT) !== latestLimit) {
+        captureLayoutRects();
+      }
       setFolderPreviewLimits((prev) => {
         if ((prev[folderId] || DEFAULT_FOLDER_PREVIEW_LIMIT) === latestLimit) return prev;
         return { ...prev, [folderId]: latestLimit };
@@ -516,7 +564,7 @@ export default function GridView({
 
   const captureLayoutRects = () => {
     const rects = new Map<string, DOMRect>();
-    gridRef.current?.querySelectorAll<HTMLElement>("[data-drag-layout-id]").forEach((element) => {
+    getDragLayoutRoot()?.querySelectorAll<HTMLElement>("[data-drag-layout-id]").forEach((element) => {
       const id = element.dataset.dragLayoutId;
       if (id) rects.set(id, element.getBoundingClientRect());
     });
@@ -545,7 +593,7 @@ export default function GridView({
     const previousRects = layoutRectsBeforePreview.current;
     if (!previousRects) return;
     layoutRectsBeforePreview.current = null;
-    gridRef.current?.querySelectorAll<HTMLElement>("[data-drag-layout-id]").forEach((element) => {
+    getDragLayoutRoot()?.querySelectorAll<HTMLElement>("[data-drag-layout-id]").forEach((element) => {
       const id = element.dataset.dragLayoutId;
       const previous = id ? previousRects.get(id) : undefined;
       if (!previous) return;
@@ -585,9 +633,11 @@ export default function GridView({
 
     const previousRects = stableLayoutRects.current;
     const shouldAnimateHiddenToggle =
-      previousShowHiddenFolders.current !== showHiddenFolders;
+      previousShowHiddenFolders.current !== showHiddenFolders ||
+      previousVisibleSectionSignature.current !== visibleSectionSignature;
     stableLayoutRects.current = currentRects;
     previousShowHiddenFolders.current = showHiddenFolders;
+    previousVisibleSectionSignature.current = visibleSectionSignature;
     if (
       !previousRects ||
       !shouldAnimateHiddenToggle ||
@@ -600,27 +650,10 @@ export default function GridView({
       const previous = previousRects.get(id);
       const current = currentRects.get(id);
       if (!current) return;
+      if (!previous) return;
 
       const animationKey = `stable-layout:${id}`;
       layoutAnimations.current.get(animationKey)?.cancel();
-      if (!previous) {
-        const animation = element.animate(
-          [
-            { opacity: 0, transform: "translateY(8px) scale(0.985)" },
-            { opacity: 1, transform: "translateY(0) scale(1)" },
-          ],
-          { duration: 180, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" }
-        );
-        layoutAnimations.current.set(animationKey, animation);
-        animation.finished
-          .then(() => {
-            if (layoutAnimations.current.get(animationKey) === animation) {
-              layoutAnimations.current.delete(animationKey);
-            }
-          })
-          .catch(() => undefined);
-        return;
-      }
 
       const deltaX = previous.left - current.left;
       const deltaY = previous.top - current.top;
@@ -641,7 +674,7 @@ export default function GridView({
         })
         .catch(() => undefined);
     });
-  }, [displayedFolderSections, showHiddenFolders, draggingItem]);
+  }, [displayedFolderSections, showHiddenFolders, draggingItem, visibleSectionSignature]);
 
   const createDragOrderSnapshot = (): DragOrderState => {
     const sourceSections = sortMode === "time"
@@ -809,6 +842,86 @@ export default function GridView({
     };
   };
 
+  const getDetailBookmarkDropCandidate = (
+    item: DragItem,
+    snapshot: DragLayoutSnapshot,
+    clientX: number,
+    clientY: number
+  ): PendingDragPreview | null => {
+    if (!activeDetail || activeDetail.kind !== "folder" || item.type !== "bookmark") return null;
+    const slots = snapshot.bookmarks
+      .filter((slot) => slot.id !== item.node.id)
+      .map((slot) => {
+        const node = findNode(tree, slot.id);
+        return node?.url ? { ...slot, node } : null;
+      })
+      .filter((slot): slot is { id: string; rect: DOMRect; node: BookmarkNode } => !!slot)
+      .sort((a, b) => {
+        const rowDelta = a.rect.top - b.rect.top;
+        if (Math.abs(rowDelta) > Math.max(8, Math.min(a.rect.height, b.rect.height) * 0.5)) {
+          return rowDelta;
+        }
+        return a.rect.left - b.rect.left;
+      });
+    if (slots.length === 0) return null;
+
+    const rows: Array<{ centerY: number; slots: typeof slots }> = [];
+    for (const slot of slots) {
+      const centerY = slot.rect.top + slot.rect.height / 2;
+      const row = rows.find(
+        (candidate) => Math.abs(candidate.centerY - centerY) <= Math.max(8, slot.rect.height * 0.55)
+      );
+      if (row) {
+        row.slots.push(slot);
+        row.centerY =
+          row.slots.reduce((sum, item) => sum + item.rect.top + item.rect.height / 2, 0) /
+          row.slots.length;
+      } else {
+        rows.push({ centerY, slots: [slot] });
+      }
+    }
+    rows.forEach((row) => row.slots.sort((a, b) => a.rect.left - b.rect.left));
+
+    let row = rows[0];
+    let rowDistance = Math.abs(clientY - row.centerY);
+    for (const candidate of rows.slice(1)) {
+      const distance = Math.abs(clientY - candidate.centerY);
+      if (distance < rowDistance) {
+        row = candidate;
+        rowDistance = distance;
+      }
+    }
+
+    const first = row.slots[0];
+    const last = row.slots[row.slots.length - 1];
+    let target = last;
+    let position: DropPosition = "after";
+    for (const slot of row.slots) {
+      const centerX = slot.rect.left + slot.rect.width / 2;
+      if (clientX < centerX) {
+        target = slot;
+        position = "before";
+        break;
+      }
+    }
+    if (clientY < rows[0].centerY - first.rect.height * 0.7) {
+      target = rows[0].slots[0];
+      position = "before";
+    } else if (clientY > rows[rows.length - 1].centerY + last.rect.height * 0.7) {
+      const finalRow = rows[rows.length - 1];
+      target = finalRow.slots[finalRow.slots.length - 1];
+      position = "after";
+    }
+
+    return {
+      key: `detail-bookmark:${target.node.id}:${position}`,
+      x: clientX,
+      y: clientY,
+      target: { kind: "bookmark", id: target.node.id, position },
+      apply: () => previewRelativeMove(item, target.node, "bookmark", position),
+    };
+  };
+
   const updateDragPreviewAt = (clientX: number, clientY: number) => {
     const item = dragData.current;
     const grid = gridRef.current;
@@ -828,6 +941,12 @@ export default function GridView({
     ) return;
 
     if (item.type === "bookmark") {
+      if (activeDetail?.kind === "folder") {
+        const candidate = getDetailBookmarkDropCandidate(item, snapshot, clientX, clientY);
+        if (candidate) queueDragPreview(candidate);
+        return;
+      }
+
       let nearestBookmark: { node: BookmarkNode; rect: DOMRect; score: number } | null = null;
       for (const slot of snapshot.bookmarks) {
         if (slot.id === item.node.id) continue;
@@ -1017,6 +1136,37 @@ export default function GridView({
   const activeFolderSection = sortMode !== "time" && activeFolderId
     ? orderedFolderSections.find((section) => section.folder.id === activeFolderId) || null
     : null;
+  const activeTimeGroup = sortMode === "time" && activeTimeGroupLabel
+    ? timeGroups.find((group) => group.label === activeTimeGroupLabel) || null
+    : null;
+  const activeDetail = activeFolderSection
+    ? {
+        kind: "folder" as const,
+        id: activeFolderSection.folder.id,
+        title: activeFolderSection.folder.title,
+        breadcrumbLabel: activeFolderSection.breadcrumbLabel,
+        bookmarks: activeFolderSection.bookmarks,
+        draggableBookmarks: !searchQuery,
+      }
+    : activeTimeGroup
+    ? {
+        kind: "time" as const,
+        id: activeTimeGroup.label,
+        title: activeTimeGroup.label,
+        breadcrumbLabel: "",
+        bookmarks: activeTimeGroup.bookmarks,
+        draggableBookmarks: false,
+      }
+    : null;
+
+  const detailColumnCount = Math.max(1, masonryColumnCount || 1);
+  const detailRowCount = activeDetail
+    ? Math.max(1, Math.ceil(activeDetail.bookmarks.length / detailColumnCount))
+    : 1;
+  const detailPreviewLimit = detailRowCount > DEFAULT_FOLDER_PREVIEW_LIMIT
+    ? DEFAULT_FOLDER_PREVIEW_LIMIT * 2
+    : DEFAULT_FOLDER_PREVIEW_LIMIT;
+  const detailHeight = getFolderSnappedHeight(detailPreviewLimit, uiScale) + GRID_SECTION_PADDING * 2 * uiScale;
 
   useEffect(() => {
     if (!activeFolderId) return;
@@ -1024,6 +1174,38 @@ export default function GridView({
       setActiveFolderId(null);
     }
   }, [activeFolderId, orderedFolderSections, sortMode]);
+
+  useEffect(() => {
+    if (!activeTimeGroupLabel) return;
+    if (sortMode !== "time" || !timeGroups.some((group) => group.label === activeTimeGroupLabel)) {
+      setActiveTimeGroupLabel(null);
+      onDetailActiveChange?.(false);
+    }
+  }, [activeTimeGroupLabel, onDetailActiveChange, sortMode, timeGroups]);
+
+  useEffect(() => {
+    if (!activeFolderId && !activeTimeGroupLabel && !isClosingDetail) {
+      onDetailActiveChange?.(false);
+    }
+  }, [activeFolderId, activeTimeGroupLabel, isClosingDetail, onDetailActiveChange]);
+
+  useLayoutEffect(() => {
+    if (!activeDetail) return;
+    const grid = gridRef.current;
+    const layout = grid?.closest<HTMLElement>(".grid-layout");
+    if (!layout) return;
+    const updateTop = () => {
+      setDetailViewportTop(Math.max(0, layout.getBoundingClientRect().top));
+    };
+    updateTop();
+    const observer = new ResizeObserver(updateTop);
+    observer.observe(layout);
+    window.addEventListener("resize", updateTop);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateTop);
+    };
+  }, [activeDetail]);
 
   const hasItems = sortMode !== "time" ? displayedFolderSections.length > 0 : timeGroups.length > 0;
   const renderedSectionCount = sortMode !== "time" ? displayedFolderSections.length : timeGroups.length;
@@ -1075,66 +1257,12 @@ export default function GridView({
     );
   }
 
-  if (activeFolderSection) {
-    return (
-      <div
-        ref={gridRef}
-        className="folder-detail-view"
-        style={masonryWidth ? { width: masonryWidth } : undefined}
-        onContextMenu={onBackgroundContextMenu}
-        onClick={() => setActiveFolderId(null)}
-      >
-        <section className="folder-detail-panel" onClick={(e) => e.stopPropagation()}>
-          <div className="folder-detail-header">
-            <button
-              type="button"
-              className="folder-detail-back"
-              onClick={() => setActiveFolderId(null)}
-              aria-label="Back to folders"
-            >
-              <ArrowLeft size={15} />
-            </button>
-            <div className="folder-detail-title-wrap">
-              <span className="grid-section-icon">📁</span>
-              <h2 className="folder-detail-title">{activeFolderSection.folder.title}</h2>
-              {activeFolderSection.breadcrumbLabel && (
-                <span className="grid-section-path">{activeFolderSection.breadcrumbLabel}</span>
-              )}
-            </div>
-          </div>
-          {activeFolderSection.bookmarks.length > 0 ? (
-            <div className="folder-detail-grid">
-              {activeFolderSection.bookmarks.map((bm) => (
-                <BookmarkCard
-                  key={bm.id}
-                  bm={bm}
-                  layoutId={`${activeFolderSection.folder.id}:detail-bookmark:${bm.id}`}
-                  draggableAllowed={false}
-                  isDragging={draggingItem?.type === "bookmark" && draggingItem.node.id === bm.id}
-                  onDragStart={handleDragStart}
-                  onDrop={(e) => void handleRelativeDrop(e, bm, "bookmark")}
-                  onDragEnd={clearDragState}
-                  onClick={handleCardClick}
-                  onContextMenu={onContextMenu}
-                  linkStatus={getLinkStatus ? getLinkStatus(bm.id) : undefined}
-                  simplifyTitle={simplifyTitles}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="folder-detail-empty">{t("folder_empty")}</div>
-          )}
-        </section>
-      </div>
-    );
-  }
-
   return (
     <div
       ref={gridRef}
       onDrop={handleGridDrop}
       onContextMenu={onBackgroundContextMenu}
-      className="grid-view"
+      className={`grid-view ${activeDetail ? "has-detail-overlay" : ""}`}
       style={masonryColumnCount
         ? {
             width: masonryWidth,
@@ -1150,7 +1278,10 @@ export default function GridView({
               const previewLimit = resizingPreview?.folderId === section.folder.id
                 ? resizingPreview.limit
                 : getFolderPreviewLimit(section.folder.id);
+              const renderLimit = getFolderRenderLimit(previewLimit, uiScale);
               const snappedHeight = getFolderSnappedHeight(previewLimit, uiScale);
+              const isHiddenFolder = hiddenFolderIds.has(section.folder.id);
+              const hiddenToggleLabel = t(isHiddenFolder ? "show_folder" : "hide_folder");
               return (
           <div
             key={section.folder.id}
@@ -1163,19 +1294,24 @@ export default function GridView({
                   )?.height || snappedHeight
                 : snappedHeight,
             }}
-            className={`grid-section ${hiddenFolderIds.has(section.folder.id) ? "is-hidden-folder" : ""} ${draggingItem?.type === "folder" && draggingItem.node.id === section.folder.id ? "dragging" : ""} ${dropTarget?.kind === "inside" && dropTarget.id === section.folder.id ? "drop-inside" : ""} ${dropTarget?.kind === "folder" && dropTarget.id === section.folder.id ? `drop-${dropTarget.position}` : ""}`}
+            className={`grid-section ${isHiddenFolder ? "is-hidden-folder" : ""} ${resizingPreview?.folderId === section.folder.id ? "is-resizing" : ""} ${draggingItem?.type === "folder" && draggingItem.node.id === section.folder.id ? "dragging" : ""} ${dropTarget?.kind === "inside" && dropTarget.id === section.folder.id ? "drop-inside" : ""} ${dropTarget?.kind === "folder" && dropTarget.id === section.folder.id ? `drop-${dropTarget.position}` : ""}`}
             onDrop={(e) => void handleSectionDrop(e, section.folder)}
           >
             <div
               className="grid-section-header"
-              onClick={() => setActiveFolderId(section.folder.id)}
+              onClick={() => {
+                setIsClosingDetail(false);
+                setActiveTimeGroupLabel(null);
+                setActiveFolderId(section.folder.id);
+                onDetailActiveChange?.(true);
+              }}
               onContextMenu={(e) => handleFolderRightClick(e, section.folder)}
               draggable={!searchQuery && section.folder.parentId !== "0" && section.folder.id !== "0"}
               onDragStart={(e) => handleDragStart(e, section.folder, "folder")}
               onDrop={(e) => void handleRelativeDrop(e, section.folder, "folder")}
               onDragEnd={clearDragState}
             >
-              <span className="grid-section-icon">📁</span>
+              <Folder className="grid-section-icon" size={15} strokeWidth={2} aria-hidden="true" />
               <div className="grid-section-title-wrap">
                 <h2 className="grid-section-title">{section.folder.title}</h2>
                 {section.breadcrumbLabel && (
@@ -1187,14 +1323,29 @@ export default function GridView({
                   </span>
                 )}
               </div>
-              <span className="grid-section-toggle" aria-hidden="true">
-                <ChevronRight size={15} />
+              <button
+                type="button"
+                className="grid-section-hide-button"
+                aria-label={hiddenToggleLabel}
+                title={hiddenToggleLabel}
+                draggable={false}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleFolderHidden(section.folder);
+                }}
+                onDragStart={(e) => e.preventDefault()}
+              >
+                {isHiddenFolder ? <Eye size={13} strokeWidth={2} /> : <EyeOff size={13} strokeWidth={2} />}
+              </button>
+              <span className="grid-section-count">
+                {section.bookmarks.length}
               </span>
             </div>
             <div className="grid-section-collapse">
               <div className="grid-section-collapse-inner">
                 <div className="grid-section-body">
-                  {Array.from({ length: previewLimit }).map((_, index) => {
+                  {Array.from({ length: renderLimit }).map((_, index) => {
                     const bm = section.bookmarks[index];
                     return bm ? (
                       <BookmarkCard
@@ -1248,38 +1399,128 @@ export default function GridView({
           <div className="grid-masonry-column" key={`time-column-${columnIndex}`}>
             {column.map((group) => (
               <div
-            key={group.label}
-            className="grid-section"
-            data-drag-layout-id={`time:${group.label}`}
-          >
-            <div className="grid-section-header">
-              <span className="grid-section-icon">🕐</span>
-              <h2 className="grid-section-title">{group.label}</h2>
-              <span className="grid-section-count">路 {group.bookmarks.length}</span>
-            </div>
-            <div className="grid-section-body">
-              {group.bookmarks.map((bm) => (
-                <BookmarkCard
-                  key={bm.id}
-                  bm={bm}
-                  layoutId={`time:${group.label}:bookmark:${bm.id}`}
-                  draggableAllowed={false}
-                  isDragging={draggingItem?.type === "bookmark" && draggingItem.node.id === bm.id}
-                  onDragStart={handleDragStart}
-                  dropPosition={dropTarget?.kind === "bookmark" && dropTarget.id === bm.id ? dropTarget.position : undefined}
-                  onDrop={(e) => void handleRelativeDrop(e, bm, "bookmark")}
-                  onDragEnd={clearDragState}
-                  onClick={handleCardClick}
-                  onContextMenu={onContextMenu}
-                  linkStatus={getLinkStatus ? getLinkStatus(bm.id) : undefined}
-                  simplifyTitle={simplifyTitles}
-                />
-              ))}
-            </div>
+                key={group.label}
+                className="grid-section"
+                data-drag-layout-id={`time:${group.label}`}
+                style={{ height: getFolderSnappedHeight(DEFAULT_FOLDER_PREVIEW_LIMIT, uiScale) }}
+              >
+                <div
+                  className="grid-section-header"
+                  onClick={() => {
+                    setIsClosingDetail(false);
+                    setActiveFolderId(null);
+                    setActiveTimeGroupLabel(group.label);
+                    onDetailActiveChange?.(true);
+                  }}
+                >
+                  <Clock3 className="grid-section-icon" size={15} strokeWidth={2} aria-hidden="true" />
+                  <div className="grid-section-title-wrap">
+                    <h2 className="grid-section-title">{group.label}</h2>
+                  </div>
+                  <span className="grid-section-count">{group.bookmarks.length}</span>
+                </div>
+                <div className="grid-section-collapse">
+                  <div className="grid-section-collapse-inner">
+                    <div className="grid-section-body">
+                      {Array.from({ length: DEFAULT_FOLDER_PREVIEW_LIMIT }).map((_, index) => {
+                        const bm = group.bookmarks[index];
+                        return bm ? (
+                          <BookmarkCard
+                            key={bm.id}
+                            bm={bm}
+                            layoutId={`time:${group.label}:bookmark:${bm.id}`}
+                            draggableAllowed={false}
+                            isDragging={draggingItem?.type === "bookmark" && draggingItem.node.id === bm.id}
+                            onDragStart={handleDragStart}
+                            onDrop={(e) => void handleRelativeDrop(e, bm, "bookmark")}
+                            onDragEnd={clearDragState}
+                            onClick={handleCardClick}
+                            onContextMenu={onContextMenu}
+                            linkStatus={getLinkStatus ? getLinkStatus(bm.id) : undefined}
+                            simplifyTitle={simplifyTitles}
+                          />
+                        ) : (
+                          <div
+                            key={`time:${group.label}:empty-slot:${index}`}
+                            className="grid-card-placeholder"
+                            aria-hidden="true"
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
         ))}
+
+      {activeDetail && (
+        <div
+          className={`folder-detail-view ${isClosingDetail ? "is-closing" : ""}`}
+          style={{
+            "--folder-detail-top": `${detailViewportTop}px`,
+            "--folder-detail-panel-width": masonryWidth ? `${masonryWidth}px` : "100%",
+          } as React.CSSProperties}
+          onContextMenu={onBackgroundContextMenu}
+          onClick={closeActiveDetail}
+        >
+          <section
+            className="folder-detail-panel"
+            style={{
+              "--folder-detail-columns": detailColumnCount,
+              height: detailHeight,
+            } as React.CSSProperties}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="folder-detail-header">
+              <button
+                type="button"
+                className="folder-detail-back"
+                onClick={closeActiveDetail}
+                aria-label="Back to folders"
+              >
+                <ArrowLeft size={15} />
+              </button>
+              <div className="folder-detail-title-wrap">
+                <Folder className="grid-section-icon" size={15} strokeWidth={2} aria-hidden="true" />
+                <h2 className="folder-detail-title">{activeDetail.title}</h2>
+                {activeDetail.breadcrumbLabel && (
+                  <span className="grid-section-path">{activeDetail.breadcrumbLabel}</span>
+                )}
+              </div>
+              <span className="folder-detail-count">
+                {t("bookmark_count", { count: activeDetail.bookmarks.length })}
+              </span>
+            </div>
+            {activeDetail.bookmarks.length > 0 ? (
+              <div className="folder-detail-grid">
+                {activeDetail.bookmarks.map((bm) => (
+                  <BookmarkCard
+                    key={bm.id}
+                    bm={bm}
+                    layoutId={`${activeDetail.kind}:${activeDetail.id}:detail-bookmark:${bm.id}`}
+                    draggableAllowed={activeDetail.draggableBookmarks}
+                    isDragging={draggingItem?.type === "bookmark" && draggingItem.node.id === bm.id}
+                    onDragStart={handleDragStart}
+                    dropPosition={activeDetail.draggableBookmarks && dropTarget?.kind === "bookmark" && dropTarget.id === bm.id ? dropTarget.position : undefined}
+                    onDrop={(e) => void handleRelativeDrop(e, bm, "bookmark")}
+                    onDragEnd={clearDragState}
+                    onClick={handleCardClick}
+                    onContextMenu={onContextMenu}
+                    linkStatus={getLinkStatus ? getLinkStatus(bm.id) : undefined}
+                    simplifyTitle={simplifyTitles}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="folder-detail-empty">
+                {t("folder_empty")}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
 
     </div>
   );

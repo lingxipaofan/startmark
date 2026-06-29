@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, X } from "lucide-react";
 import { useI18n, type Locale } from "../lib/i18n";
@@ -18,8 +18,6 @@ interface Props {
   onSearchEngineChange: (value: SearchEngineId) => void;
   customSearchEngines: CustomSearchEngine[];
   onCustomSearchEnginesChange: (value: CustomSearchEngine[]) => void;
-  showRootFolders: boolean;
-  onShowRootFoldersChange: (value: boolean) => void;
   zoom: number;
   onZoomChange: (value: number) => void;
   onClose: () => void;
@@ -34,14 +32,18 @@ export default function SettingsModal({
   onSearchEngineChange,
   customSearchEngines,
   onCustomSearchEnginesChange,
-  showRootFolders,
-  onShowRootFoldersChange,
   zoom,
   onZoomChange,
   onClose,
 }: Props) {
   const { t, locale, setLocale, locales } = useI18n();
   const closeRef = useRef<HTMLButtonElement>(null);
+  const [closing, setClosing] = useState(false);
+
+  const requestClose = useCallback(() => {
+    setClosing(true);
+    window.setTimeout(onClose, 160);
+  }, [onClose]);
 
   const updateCustomEngine = (id: string, patch: Partial<CustomSearchEngine>) => {
     onCustomSearchEnginesChange(
@@ -75,19 +77,19 @@ export default function SettingsModal({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") requestClose();
     };
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  }, [requestClose]);
 
   return createPortal(
     <div
-      className="settings-backdrop"
+      className={`settings-backdrop ${closing ? "is-closing" : ""}`}
       data-testid="settings-backdrop"
       onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) requestClose();
       }}
     >
       <section
@@ -102,7 +104,7 @@ export default function SettingsModal({
             ref={closeRef}
             type="button"
             className="settings-close-button"
-            onClick={onClose}
+            onClick={requestClose}
             aria-label={t("close_settings")}
             title={t("close_settings")}
           >
@@ -238,22 +240,6 @@ export default function SettingsModal({
                 aria-label={t("simplify_titles")}
                 checked={simplifyTitles}
                 onChange={(event) => onSimplifyTitlesChange(event.target.checked)}
-              />
-              <span className="settings-switch-track" aria-hidden="true">
-                <span className="settings-switch-thumb" />
-              </span>
-            </label>
-            <label className="settings-row settings-switch-row" title={t("show_root_folders_hint")}>
-              <span className="settings-label-copy">
-                <strong>{t("show_root_folders")}</strong>
-                <small>{t("show_root_folders_hint")}</small>
-              </span>
-              <input
-                type="checkbox"
-                role="switch"
-                aria-label={t("show_root_folders")}
-                checked={showRootFolders}
-                onChange={(event) => onShowRootFoldersChange(event.target.checked)}
               />
               <span className="settings-switch-track" aria-hidden="true">
                 <span className="settings-switch-thumb" />

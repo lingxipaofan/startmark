@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Header from "../src/components/Header";
 import { I18nProvider } from "../src/lib/i18n";
@@ -19,8 +19,6 @@ function renderHeader(overrides = {}) {
     onDarkModeChange: vi.fn(),
     simplifyTitles: false,
     onSimplifyTitlesChange: vi.fn(),
-    showRootFolders: true,
-    onShowRootFoldersChange: vi.fn(),
     ...overrides,
   };
 
@@ -70,9 +68,6 @@ describe("Header settings", () => {
 
     fireEvent.click(screen.getByRole("switch", { name: "Short titles" }));
     expect(props.onSimplifyTitlesChange).toHaveBeenCalledWith(true);
-
-    fireEvent.click(screen.getByRole("switch", { name: "Show root folders" }));
-    expect(props.onShowRootFoldersChange).toHaveBeenCalledWith(false);
 
     fireEvent.change(screen.getByRole("combobox", { name: "Search engine" }), {
       target: { value: "bing" },
@@ -125,21 +120,31 @@ describe("Header settings", () => {
   });
 
   it("closes from the close button, backdrop, and Escape", () => {
+    vi.useFakeTimers();
     renderHeader();
     const open = () => {
       fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     };
+    const finishCloseAnimation = () => {
+      act(() => {
+        vi.advanceTimersByTime(160);
+      });
+    };
 
     open();
     fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
+    finishCloseAnimation();
     expect(screen.queryByRole("dialog")).toBeNull();
 
     open();
     fireEvent.click(screen.getByTestId("settings-backdrop"));
+    finishCloseAnimation();
     expect(screen.queryByRole("dialog")).toBeNull();
 
     open();
     fireEvent.keyDown(document, { key: "Escape" });
+    finishCloseAnimation();
     expect(screen.queryByRole("dialog")).toBeNull();
+    vi.useRealTimers();
   });
 });

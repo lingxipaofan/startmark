@@ -152,10 +152,8 @@ export default function ContextMenu({
           </div>
           <div className="context-menu-sep" />
           <div
-            className={`context-menu-item ${hiddenFolderCount === 0 ? "disabled" : ""}`}
-            onClick={() => {
-              if (hiddenFolderCount > 0) onAction("toggle-hidden-folders");
-            }}
+            className="context-menu-item"
+            onClick={() => onAction("toggle-hidden-folders")}
           >
             <span className="context-menu-label">
               {showHiddenFolders ? "✓ " : ""}
